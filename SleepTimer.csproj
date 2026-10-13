@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- .NET Framework 4.8 ships with Windows 10/11: a single small exe, no runtime to install. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>10</LangVersion>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>SleepTimer</AssemblyName>
+    <RootNamespace>SleepTimer</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>assets\SleepTimer.ico</ApplicationIcon>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="test\**;validation\**" />
+    <EmbeddedResource Include="assets\github-mark-white.png" LogicalName="github-mark-white.png" />
+  </ItemGroup>
+</Project>

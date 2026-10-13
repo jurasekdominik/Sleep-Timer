@@ -1,0 +1,84 @@
+using System;
+using System.Diagnostics;
+using System.Drawing;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Windows.Forms;
+
+namespace SleepTimer
+{
+    static class WindowsChecks
+    {
+        const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
+        [DllImport("user32.dll")] static extern int GetGuiResources(IntPtr process, int flags);
+        static T Field<T>(object owner, string name) => (T)owner.GetType().GetField(name, Private).GetValue(owner);
+        static void Set(object owner, string name, object value) => owner.GetType().GetField(name, Private).SetValue(owner, value);
+        static void Call(object owner, string name, params object[] args) => owner.GetType().GetMethod(name, Private).Invoke(owner, args);
+        static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
+        static void Pump(int milliseconds)
+        {
+            var clock = Stopwatch.StartNew();
+            while (clock.ElapsedMilliseconds < milliseconds) { Application.DoEvents(); System.Threading.Thread.Sleep(5); }
+        }
+        static MainForm Open()
+        {
+            var form = new MainForm(); form.Show();
+            // Stop expiry polling before any test starts a countdown. No power action is ever fired.
+            Field<System.Windows.Forms.Timer>(form, "ticker").Stop();
+            return form;
+        }
+        [STAThread] static int Main()
+        {
+            Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Theme.Init();
+            try
+            {
+                using (var form = Open())
+                {
+                    var timer = Field<Countdown>(form, "countdown");
+                    var ring = Field<Ring>(form, "ring");
+                    Set(form, "clockMode", false); Call(form, "SyncMode", false); Call(form, "SetAction", "shutdown");
+                    timer.SetDuration(1800); Call(form, "UpdateView", false); Pump(200);
+                    Call(form, "StartQuickTimer", 150); timer.Pause(); Call(form, "UpdateView", false); Pump(200);
+                    Set(form, "trayQuickPage", true); Set(form, "trayQuickActionPage", true);
+                    var actions = (System.Collections.Generic.List<PickRow>)form.GetType().GetMethod("TrayRows", Private).Invoke(form, null);
+                    actions.Single(r => r.Text == "Restart").Click();
+                    Check(Field<PowerAction>(form, "action").Key == "shutdown", "Choosing next action changed paused countdown");
+                    Call(form, "StartQuickTimer", 60);
+                    Check(Field<PowerAction>(form, "action").Key == "restart", "Quick action was not applied");
+                    Check(Field<ActionPicker>(form, "picker").Current == "restart", "Window picker did not synchronize");
+                    timer.Reset(); Call(form, "UpdateView", false);
+                    var wheel = typeof(Ring).GetMethod("OnMouseWheel", Private);
+                    timer.SetDuration(1800);
+                    for (int i = 0; i < 5000; i++) wheel.Invoke(ring, new object[] {new MouseEventArgs(MouseButtons.None, 0, 0, 0, 12)});
+                    ring.FlushWheel();
+                    Check(timer.Duration == Countdown.MaxSet, "Fast-wheel batching lost duration changes");
+                    for (int i = 0; i < 20; i++) wheel.Invoke(ring, new object[] {new MouseEventArgs(MouseButtons.None, 0, 0, 0, -120)});
+                    ring.FlushWheel(); Check(timer.Duration == Countdown.MaxSet - 6000, "Wheel reversal was delayed");
+                }
+                // Warm caches before checking that repeated construction/disposal does not grow GDI objects.
+                for (int i = 0; i < 3; i++) using (var f = Open()) Pump(20);
+                GC.Collect(); GC.WaitForPendingFinalizers();
+                int baseline = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
+                for (int i = 0; i < 25; i++) using (var f = Open())
+                {
+                    Call(f, "ToggleSettings"); Pump(20); // Also close in the middle of a bitmap crossfade.
+                    var list = Field<PopupList>(f, "awakeList");
+                    list.Show(new System.Collections.Generic.List<PickRow> {new PickRow {Text = "Off"}}, new Point(100, 100), false, true);
+                    Pump(20);
+                }
+                GC.Collect(); GC.WaitForPendingFinalizers(); Pump(100);
+                int final = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
+                Check(final - baseline < 32, $"GDI resource growth: {baseline} -> {final}");
+                Console.WriteLine($"Windows checks passed; GDI objects {baseline} -> {final}");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("::error::" + ex.ToString().Replace("%", "%25").Replace("\r", "%0D").Replace("\n", "%0A"));
+                return 1;
+            }
+            finally { Native.KeepAwake(false, false); Theme.DisposeFonts(); }
+        }
+    }
+}

@@ -1,0 +1,56 @@
+name: Validate
+on:
+  push:
+    branches: [main]
+    tags: [v1.0]
+    paths-ignore: ['assets/screenshot*.png', 'README.md']
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  logic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+      - run: bash scripts/check-timers.sh
+      - run: dotnet build SleepTimer.csproj -c Release --nologo -warnaserror
+  windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet build SleepTimer.csproj -c Release --nologo -warnaserror
+      - shell: pwsh
+        run: ./scripts/check-windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SleepTimer-1.0
+          path: bin/Release/net48/SleepTimer.exe
+      - name: Update 1.0 release
+        if: github.event_name == 'push' && github.ref == 'refs/tags/v1.0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+          "A Windows timer for shutdown, sleep and restart, with quick presets and keep-awake options.`n`nRequires Windows 10/11 and .NET Framework 4.8. Download SleepTimer.exe and run it." | Set-Content $notes -Encoding utf8
+          gh release view v1.0 --repo '${{ github.repository }}' *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release edit v1.0 --repo '${{ github.repository }}' --title 'Sleep Timer 1.0' --notes-file $notes --latest
+          } else {
+            gh release create v1.0 --repo '${{ github.repository }}' --verify-tag --title 'Sleep Timer 1.0' --notes-file $notes --latest
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Release creation or update failed' }
+          gh release upload v1.0 bin/Release/net48/SleepTimer.exe --repo '${{ github.repository }}' --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Release executable upload failed' }
