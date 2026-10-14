@@ -575,8 +575,6 @@ namespace SleepTimer
             Theme.DrawSpaced(g, Title, Theme.Ui(9f, 600), Theme.Second, new RectangleF(rect.X, c.Y - Theme.D(96), side, Theme.D(24)), 2 * Theme.S);
             Theme.Draw(g, Time, Theme.Display(34f, 400), Theme.Text, new RectangleF(rect.X, c.Y - Theme.D(72), side, Theme.D(72)), StringAlignment.Center);
             Theme.Draw(g, Sub, Theme.Ui(10.5f), Theme.Second, new RectangleF(rect.X, c.Y + Theme.D(48), side, Theme.D(24)), StringAlignment.Center);
-            Theme.Draw(g, dial.Caption, Theme.Ui(9f), Theme.Faint,
-                       new RectangleF(rect.X, c.Y + Theme.D(80), side, Theme.D(20)), StringAlignment.Center);
         }
 
         void DrawTicks(Graphics g, PointF center, float radius, Color active)
@@ -1336,7 +1334,9 @@ namespace SleepTimer
             popup = drop.Show(list, Theme.PopupShape(list.Width, list.Height));
             host = (ToolStripControlHost)popup.Items[0];
             roll.Set(animate ? Math.Max(0.001, (double)FirstRow(rows) / list.Height) : 1);
+            Fit();
             popup.Show(popup.Location);
+            Fit();
             if (animate) roll.To(1);
         }
 

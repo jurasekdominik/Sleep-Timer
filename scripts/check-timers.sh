@@ -113,11 +113,14 @@ class Checks
                     checks++;
                 }
         }
-        Equal(TimerDial.For(9000).HourFill, 1.5, "2h30 last hour half faded");
-        Equal(TimerDial.For(10800).HourFill, 2, "3h both hour segments full");
-        Equal(TimerDial.For(7200).HourFill, 1, "2h one segment full at rollover");
-        Equal(TimerDial.For(5400).HourFill, .5, "1h30 only hour half faded");
-        Equal(TimerDial.For(3600).HourFill, 0, "no additional hours");
+        Equal(TimerDial.For(9000).HourFill, 2.5, "2h30 last hour half faded");
+        Equal(TimerDial.For(10800).HourFill, 3, "3h all hour segments full");
+        Equal(TimerDial.For(7200).HourFill, 2, "2h two segments full at rollover");
+        Equal(TimerDial.For(5400).HourFill, 1.5, "1h30 second hour half faded");
+        Equal(TimerDial.For(3600).HourFill, 1, "first hour included");
+        Equal(TimerDial.For(1800).HourFill, .5, "first hour half faded");
+        Equal(TimerDial.For(86400).HourFill, 24, "24h fills inner circle");
+        Equal(TimerDial.For(0).HourFill, 0, "expired hour blocks");
         if (TimerDial.For(7201).HourFill <= TimerDial.For(7200).HourFill || TimerDial.For(7200).HourFill <= TimerDial.For(7199).HourFill)
             throw new Exception("hour fading must decrease continuously across rollover");
         checks++;

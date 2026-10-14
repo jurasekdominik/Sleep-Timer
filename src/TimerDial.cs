@@ -13,7 +13,7 @@ namespace SleepTimer
         public static int Complete(double remainingFraction) => (int)Math.Floor(100 * (1 - Math.Max(0, Math.Min(1, remainingFraction))));
     }
 
-    /// <summary>Each revolution represents an hour; larger marks carry the additional hours.</summary>
+    /// <summary>Each revolution represents an hour; inner blocks carry all remaining hours.</summary>
     sealed class TimerDial
     {
         public double Seconds => 3600;
@@ -21,12 +21,11 @@ namespace SleepTimer
         public int MajorEvery => 5;
         public int ExtraHours { get; }
         public double HourFill { get; }
-        public string Caption => ExtraHours == 0 ? "1 tick = 1 min · 60 min dial" : $"60 min dial · +{ExtraHours} h";
 
         TimerDial(double remaining)
         {
             ExtraHours = Math.Max(0, (int)Math.Ceiling(WholeSeconds(remaining) / Seconds) - 1);
-            HourFill = ExtraHours == 0 ? 0 : ExtraHours - 1 + Fraction(remaining);
+            HourFill = ExtraHours + Fraction(remaining);
         }
 
         // Match the numeric countdown's rounding so marks and digits cross hour boundaries together.
