@@ -719,6 +719,7 @@ namespace SleepTimer
             double seconds;
             string idleLabel = "";
             ring.State = state;
+            ring.ClockTime = state == TimerState.Idle && clockMode;
 
             if (state == TimerState.Idle)
             {

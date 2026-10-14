@@ -13,7 +13,7 @@ namespace SleepTimer
     static class Motion
     {
         public const int Progress = 100, Press = 90, Switch = 240, SwitchPress = 140,
-                         Tabs = 220, Selection = 320, Reveal = 160;
+                         Tabs = 220, Selection = 320, Reveal = 160, Dial = 600;
     }
 
     static class Theme
@@ -458,11 +458,16 @@ namespace SleepTimer
         long pendingWheel;
         bool hot;
         double timeTarget = 1800;
+        readonly Stopwatch counterClock = new Stopwatch();
 
         public TimerState State;
         public bool Urgent, Interactive = true;
         public TimerTone Tone = TimerTone.Idle;
         public string Title = "", Time = "", Sub = "";
+        public bool ClockTime;
+        public string DisplayTime => !ClockTime && sweep.Running && counterClock.IsRunning
+            && counterClock.ElapsedMilliseconds < Motion.Dial
+            ? TimeText.Clock(Math.Round(sweep.Value / 60) * 60) : Time;
         TimerDial dial = TimerDial.For(1800);
 
         public void SetTime(double seconds, bool animate)
@@ -478,6 +483,8 @@ namespace SleepTimer
             // Animate total seconds, then wrap only while painting. The moving edge keeps
             // its direction when crossing twelve o'clock instead of reversing around the dial.
             double position = Math.Max(0, Math.Min(Countdown.MaxSet, seconds));
+            if (animate && motion) counterClock.Restart();
+            else if (!motion && position != timeTarget) counterClock.Reset();
             if (motion) sweep.To(position);
             else if (!sweep.Running || position != timeTarget) sweep.Set(position);
             timeTarget = position;
@@ -485,8 +492,8 @@ namespace SleepTimer
 
         public Ring()
         {
-            sweep = Own(new Tween(320, 1800, Invalidate));
-            hours = Own(new Tween(320, 0, Invalidate));
+            sweep = Own(new Tween(Motion.Dial, 1800, Invalidate));
+            hours = Own(new Tween(Motion.Dial, 0, Invalidate));
             wheelFrame = Own(new Timer { Interval = 16 });
             wheelFrame.Tick += (s, e) => FlushWheel();
         }
@@ -494,7 +501,7 @@ namespace SleepTimer
         public event Action<int> Wheel;
         public event Action ToggleClicked, CancelClicked;
 
-        public void Snap(double seconds) => sweep.Set(seconds);
+        public void Snap(double seconds) { counterClock.Reset(); sweep.Set(seconds); }
 
         float Side => Math.Min(Width, Height) - Theme.D(40);
         PointF Center => new PointF(Width / 2f, Height / 2f);
@@ -569,7 +576,7 @@ namespace SleepTimer
             DrawHours(g, c, side / 2 - stroke / 2 - 8 * Theme.S, c1);
 
             Theme.DrawSpaced(g, Title, Theme.Ui(9f, 600), Theme.Second, new RectangleF(rect.X, c.Y - Theme.D(96), side, Theme.D(24)), 2 * Theme.S);
-            Theme.Draw(g, Time, Theme.Display(34f, 400), Theme.Text, new RectangleF(rect.X, c.Y - Theme.D(72), side, Theme.D(72)), StringAlignment.Center);
+            Theme.Draw(g, DisplayTime, Theme.Display(34f, 400), Theme.Text, new RectangleF(rect.X, c.Y - Theme.D(72), side, Theme.D(72)), StringAlignment.Center);
             Theme.Draw(g, Sub, Theme.Ui(10.5f), Theme.Second, new RectangleF(rect.X, c.Y + Theme.D(48), side, Theme.D(24)), StringAlignment.Center);
         }
 
