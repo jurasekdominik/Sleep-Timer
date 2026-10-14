@@ -165,7 +165,7 @@ namespace SleepTimer
             awakeChip.Style = (Style)FindResource("ChipButton");
             Place(main, awakeChip, 128, 404);
             Place(main, awakeSwitch, 300, 408);
-            awakeChip.Click += (s, e) => { if (!awakeMenu.Visible && !awakeMenu.JustClosed) awakeMenu.Show(AwakeRows(), awakeChip); };
+            awakeChip.Click += (s, e) => { if (!awakeMenu.Visible && !awakeMenu.JustClosed) awakeMenu.Show(ChipRows(), awakeChip); };
             awakeSwitch.Click += (s, e) => { if (!syncing) SetAwake(awakeSwitch.IsChecked == true ? -1 : 0); };
             awakeSwitch.ToolTip = "Keep the PC awake until you turn this off";
             AddFooter(main);
@@ -461,6 +461,12 @@ namespace SleepTimer
             { screenOn = !screenOn; Settings.Set("awake_screen", screenOn); ApplyAwake(); UpdateView(); } });
             return rows;
         }
+        List<MenuRow> ChipRows()
+        {
+            var rows = new List<MenuRow> { new MenuRow { Text = Convert.ToString(awakeChip.Content), Header = true }, new MenuRow { Separator = true } };
+            rows.AddRange(AwakeRows().Where(r => !r.Selected || r.Text == "Keep screen on"));
+            return rows;
+        }
         List<MenuRow> TrayRows()
         {
             if (trayPage == 3)
@@ -573,7 +579,7 @@ namespace SleepTimer
             awakeChip.Background = Theme.Brush(awake == null ? Theme.Surface : Theme.Blend(Theme.Surface, Theme.Accent, .18));
             awakeChip.Foreground = Theme.Brush(awake == null ? Theme.Second : Theme.Blend(Theme.Accent, Colors.White, .22));
             syncing = true; awakeSwitch.IsChecked = awake != null; syncing = false;
-            if (awakeMenu.Visible) awakeMenu.SetRows(AwakeRows());
+            if (awakeMenu.Visible) awakeMenu.SetRows(ChipRows());
             if (trayMenu.Visible) trayMenu.SetRows(TrayRows());
             string tip = state == TimerState.Running ? "Sleep Timer · " + TimeText.Clock(seconds) + " left · " + TimerStatus.Complete(countdown.Fraction) + "% complete"
                 : state == TimerState.Paused ? "Paused · " + TimeText.Clock(seconds) + " left · " + TimerStatus.Complete(countdown.Fraction) + "% complete"

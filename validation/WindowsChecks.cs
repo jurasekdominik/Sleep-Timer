@@ -50,7 +50,11 @@ namespace SleepTimer
         static void Capture(MainWindow window, string name)
         {
             window.UpdateLayout();
-            var root = (FrameworkElement)window.Content;
+            CaptureControl((FrameworkElement)window.Content, name);
+        }
+        static void CaptureControl(FrameworkElement root, string name)
+        {
+            root.UpdateLayout();
             int width = (int)Math.Ceiling(root.ActualWidth), height = (int)Math.Ceiling(root.ActualHeight);
             var image = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
             image.Render(root);
@@ -172,6 +176,12 @@ namespace SleepTimer
                             Check(row.Height == 28 && row.Style == Application.Current.FindResource("MenuButton"), "Popup row uses boxed button styling");
                             awake.Close(); Pump(200);
                         }
+                        awake.Show((System.Collections.Generic.List<MenuRow>)Call(visual, "ChipRows"), anchor);
+                        Pump(200); CaptureControl((FrameworkElement)Field<Popup>(awake, "popup").Child, "wpf-awake-menu"); awake.Close(); Pump(200);
+                        var trayPopup = Field<PopupMenu>(visual, "trayMenu");
+                        Set(visual, "trayPage", 0);
+                        trayPopup.Show((System.Collections.Generic.List<MenuRow>)Call(visual, "TrayRows"), anchor);
+                        Pump(200); CaptureControl((FrameworkElement)Field<Popup>(trayPopup, "popup").Child, "wpf-tray-menu"); trayPopup.Close(); Pump(200);
                         SendMessage(new WindowInteropHelper(visual).Handle, 0x0112, (IntPtr)0xF100, IntPtr.Zero);
                         var info = new GuiThreadInfo { Size = Marshal.SizeOf(typeof(GuiThreadInfo)) };
                         Check(GetGUIThreadInfo(0, ref info) && (info.Flags & 4) == 0, "Alt release activated menu mode");
