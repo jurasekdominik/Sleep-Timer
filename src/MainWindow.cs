@@ -29,11 +29,10 @@ namespace SleepTimer
         readonly TimerFace face = new TimerFace();
         readonly Canvas main = new Canvas(), settings = new Canvas();
         readonly Grid root = new Grid();
-        readonly Button gear = new Button { Content = "⚙", Padding = new Thickness(0), FontSize = 20, Width = 30, Height = 30, ToolTip = "Settings" };
-        readonly Button picker = new Button { Width = 160, Height = 32, Padding = new Thickness(8, 3, 8, 3) };
-        readonly Button durationButton = new Button { Content = "Duration", Height = 32 };
-        readonly Button clockButton = new Button { Content = "At time", Height = 32 };
-        readonly TextBox clockField = new TextBox { MaxLength = 5, Width = 88, Height = 32, TextAlignment = TextAlignment.Center, ToolTip = "24-hour time, HH:mm. Scroll hours or minutes; arrow keys adjust." };
+        readonly Button gear = new Button { Content = new GearMark(), Padding = new Thickness(0), Width = 30, Height = 30, ToolTip = "Settings" };
+        readonly ActionSelector picker = new ActionSelector();
+        readonly ModeSelector modeSelector = new ModeSelector();
+        readonly TextBox clockField = new TextBox { MaxLength = 5, Width = 101.333333, Height = 32, TextAlignment = TextAlignment.Center, ToolTip = "24-hour time, HH:mm. Scroll hours or minutes; arrow keys adjust." };
         readonly Button awakeChip = new Button { Width = 160, Height = 32 };
         readonly ToggleButton awakeSwitch = new ToggleButton();
         readonly ToggleButton startupSwitch = new ToggleButton { IsChecked = Settings.Get("start_with_windows", false) };
@@ -43,13 +42,15 @@ namespace SleepTimer
         readonly TextBox quickMinutes = new TextBox { MaxLength = 4, Width = 184, ToolTip = "Whole minutes from 1 to 1440" };
         readonly TextBlock quickNote = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
         readonly Button customChip = new Button { Width = 288 };
-        readonly PopupMenu trayMenu = new PopupMenu(), awakeMenu = new PopupMenu(224), actionMenu = new PopupMenu(180), customMenu = new PopupMenu(288);
+        readonly PopupMenu trayMenu = new PopupMenu(), awakeMenu = new PopupMenu(160), customMenu = new PopupMenu(288);
         readonly List<FrameworkElement> cards = new List<FrameworkElement>();
         readonly List<Button> tabButtons = new List<Button>();
         readonly List<Button> swatches = new List<Button>();
-        readonly Border modeHighlight = new Border { CornerRadius = new CornerRadius(8), Width = 100, Height = 32, HorizontalAlignment = HorizontalAlignment.Left };
+        readonly Border tabUnderline = new Border { Height = 2.5 };
+        readonly TranslateTransform tabSlide = new TranslateTransform();
+        readonly List<double> tabPositions = new List<double>(), tabWidths = new List<double>();
         readonly TranslateTransform modeSlide = new TranslateTransform();
-        Grid mode;
+        Canvas mode;
         ColorPicker colorPicker;
         PowerAction action, quickAction;
         int clockMinute, awakeMinutes, lastQuickMinutes, trayPage, selectedTab;
@@ -74,6 +75,9 @@ namespace SleepTimer
             Title = "Sleep Timer"; Width = 384; Height = 548;
             ResizeMode = ResizeMode.CanMinimize; WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Background = Theme.Brush(Theme.Bg); Content = root;
+            FontFamily = new FontFamily("Segoe UI"); FontSize = 14;
+            TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
+            TextOptions.SetTextRenderingMode(this, TextRenderingMode.ClearType);
             UseLayoutRounding = true; SnapsToDevicePixels = true;
             Icon = BitmapFrame.Create(new Uri("pack://application:,,,/assets/SleepTimer.ico"));
             main.Width = settings.Width = 368; main.Height = settings.Height = 508;
@@ -83,6 +87,7 @@ namespace SleepTimer
             settings.Visibility = Visibility.Collapsed;
             BuildMain(); BuildSettings();
             gear.HorizontalAlignment = HorizontalAlignment.Right; gear.VerticalAlignment = VerticalAlignment.Top; gear.Margin = new Thickness(0, 12, 24, 0);
+            gear.Style = (Style)FindResource("IconButton");
             root.Children.Add(gear); gear.Click += (s, e) => ToggleSettings();
             face.Toggle += StartPause; face.Cancel += Cancel; face.Wheel += AddTime;
             tray.MouseUp += (s, e) => { if (e.Button == Forms.MouseButtons.Right) Dispatcher.BeginInvoke((Action)ShowTrayMenu); };
@@ -130,27 +135,14 @@ namespace SleepTimer
         void BuildMain()
         {
             Place(main, face, 24, 12);
-            Place(main, picker, 104, 183);
-            picker.Click += (s, e) =>
-            {
-                if (actionMenu.Visible || actionMenu.JustClosed) return;
-                actionMenu.Show(PowerAction.All.Select(a => new MenuRow { Text = a.Label, Selected = a.Key == action.Key,
-                    Click = () => SetAction(a.Key) }), picker);
-            };
-            mode = new Grid { Width = 320, Height = 32 };
-            mode.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
-            mode.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(112) });
-            mode.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(108) });
-            modeHighlight.RenderTransform = modeSlide;
-            modeHighlight.SetResourceReference(Border.BackgroundProperty, "SoftBrush");
-            Grid.SetColumnSpan(modeHighlight, 3); mode.Children.Add(modeHighlight);
-            durationButton.Background = clockButton.Background = Brushes.Transparent;
-            durationButton.BorderBrush = clockButton.BorderBrush = Brushes.Transparent;
-            mode.Children.Add(durationButton); Grid.SetColumn(clockButton, 1); mode.Children.Add(clockButton);
-            Grid.SetColumn(clockField, 2); mode.Children.Add(clockField);
+            Place(main, picker, 44, 182);
+            picker.Changed += SetAction;
+            mode = new Canvas { Width = 320, Height = 32 };
+            modeSelector.RenderTransform = modeSlide;
+            Place(mode, modeSelector, 0, 0);
+            Place(mode, clockField, 218.6666667, 0, 101.3333333, 32);
             Place(main, mode, 24, 356);
-            durationButton.Click += (s, e) => SetMode(false);
-            clockButton.Click += (s, e) => SetMode(true);
+            modeSelector.Changed += SetMode;
             clockField.LostKeyboardFocus += (s, e) => CommitClock();
             clockField.KeyDown += (s, e) =>
             {
@@ -169,6 +161,7 @@ namespace SleepTimer
             var awakeLabel = Label("Keep awake");
             awakeLabel.Cursor = Cursors.Hand; awakeLabel.MouseLeftButtonUp += (s, e) => SetAwake(awakeMinutes == 0 ? -1 : 0);
             Place(main, awakeLabel, 24, 410, 96, 24);
+            awakeChip.Style = (Style)FindResource("ChipButton");
             Place(main, awakeChip, 128, 404);
             Place(main, awakeSwitch, 300, 408);
             awakeChip.Click += (s, e) => { if (!awakeMenu.Visible && !awakeMenu.JustClosed) awakeMenu.Show(AwakeRows(), awakeChip); };
@@ -180,17 +173,7 @@ namespace SleepTimer
         void AddFooter(Canvas parent)
         {
             Place(parent, new Border { Background = Theme.Brush(Theme.Border) }, 24, 452, 320, 1);
-            var logo = new StackPanel { Orientation = Orientation.Horizontal, Cursor = Cursors.Hand, ToolTip = "Open the project on GitHub" };
-            logo.Children.Add(Label("◔", 25));
-            logo.Children.Add(new TextBlock { Text = " sleep timer", FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center });
-            logo.MouseLeftButtonUp += (s, e) => Native.OpenUrl("https://github.com/jurasekdominik/sleep-timer");
-            Place(parent, logo, 24, 464, 140, 28);
-            var byline = Label("v" + Program.Version + " · © Dominik Jurásek", 11, true);
-            Place(parent, byline, 164, 471, 156, 18);
-            var github = new Image { Width = 16, Height = 16, Cursor = Cursors.Hand,
-                Source = new BitmapImage(new Uri("pack://application:,,,/assets/github-mark-white.png")) };
-            github.MouseLeftButtonUp += (s, e) => Native.OpenUrl("https://github.com/jurasekdominik/sleep-timer");
-            Place(parent, github, 328, 471);
+            Place(parent, new BrandFooter(), 24, 464, 320, 28);
         }
 
         Border Card(int tab, double y, double height)
@@ -203,21 +186,30 @@ namespace SleepTimer
         void BuildSettings()
         {
             Place(settings, new TextBlock { Text = "Settings", FontSize = 15, FontWeight = FontWeights.SemiBold }, 24, 20, 200, 24);
-            var tabs = new StackPanel { Orientation = Orientation.Horizontal };
+            var tabs = new Canvas { Width = 320, Height = 24 };
             string[] names = { "GENERAL", "APPEARANCE", "TIMERS" };
+            double tabX = 0;
             for (int i = 0; i < names.Length; i++)
             {
                 int tab = i;
-                var b = new Button { Content = names[i], FontSize = 12, Padding = new Thickness(10, 6, 10, 6), Margin = new Thickness(0, 0, 4, 0) };
-                b.Click += (s, e) => SelectTab(tab); tabButtons.Add(b); tabs.Children.Add(b);
+                string spaced = string.Join(" ", names[i].ToCharArray());
+                double width = VisualText.Make(this, spaced, 12, Theme.Text, true).WidthIncludingTrailingWhitespace;
+                tabPositions.Add(tabX); tabWidths.Add(width);
+                var b = new Button { Content = spaced, FontSize = 12, FontWeight = FontWeights.SemiBold, Width = width + 4, Height = 17,
+                    Style = (Style)FindResource("TextButton"), HorizontalContentAlignment = HorizontalAlignment.Left };
+                b.Click += (s, e) => SelectTab(tab); tabButtons.Add(b); Place(tabs, b, tabX, 0);
+                tabX += width + 22;
             }
-            Place(settings, tabs, 24, 56, 320, 32);
-            var general = (Canvas)Card(0, 100, 128).Child;
+            tabUnderline.RenderTransform = tabSlide;
+            tabUnderline.SetResourceReference(Border.BackgroundProperty, "AccentBrush");
+            Place(tabs, tabUnderline, 0, 18, tabWidths[0], 2.5);
+            Place(settings, tabs, 24, 56, 320, 24);
+            var general = (Canvas)Card(0, 88, 128).Child;
             SwitchRow(general, "Start with Windows", "Opens in the tray when you sign in", startupSwitch, 0);
             SwitchRow(general, "Force close apps", "Skips “save changes?” prompts (/f)", forceSwitch, 64);
             startupSwitch.Click += (s, e) => { bool on = startupSwitch.IsChecked == true; Startup.Set(on); Settings.Set("start_with_windows", on); };
             forceSwitch.Click += (s, e) => Settings.Set("force", forceSwitch.IsChecked == true);
-            var help = (Canvas)Card(0, 244, 184).Child;
+            var help = (Canvas)Card(0, 232, 184).Child;
             string[,] rows = { { "Left-click the ring", "Start · Pause" }, { "Right-click the ring", "Cancel" }, { "Scroll", "±5 min" }, { "Alt + scroll", "±1 min" },
                 { "Shift + scroll", "±15 min" }, { "Ctrl + scroll", "±30 min" }, { "Ctrl+Shift + scroll", "±60 min" }, { "Whole-hour stop", "400 ms" } };
             for (int i = 0; i < rows.GetLength(0); i++)
@@ -226,28 +218,21 @@ namespace SleepTimer
                 var right = Label(rows[i, 1], 12); right.TextAlignment = TextAlignment.Right;
                 Place(help, right, 180, 12 + i * 20, 120, 20);
             }
-            var appearance = (Canvas)Card(1, 100, 176).Child;
+            var appearance = (Canvas)Card(1, 88, 160).Child;
             Place(appearance, Label("Accent colour"), 20, 16, 280, 24);
-            Place(appearance, accentNote, 20, 44, 280, 32);
+            Place(appearance, accentNote, 20, 38, 280, 18);
             string[] colors = { "#0CD29D", "#BADC58", "#FFB142", "#FF793F", "#FD79A8", "#8C7AE6", "#A29BFE", "#34ACE0" };
             for (int i = 0; i < colors.Length; i++)
             {
                 string hex = colors[i]; Color color = Theme.Hex(hex);
                 var dot = new System.Windows.Shapes.Ellipse { Fill = Theme.Brush(color), Width = 28, Height = 28 };
-                var b = new Button { Content = dot, Padding = new Thickness(3), Width = 36, Height = 36, Background = Brushes.Transparent, ToolTip = hex, Tag = hex };
+                var b = new Button { Content = dot, Padding = new Thickness(3), Width = 36, Height = 36, Background = Brushes.Transparent, ToolTip = hex, Tag = hex, Style = (Style)FindResource("SwatchButton") };
                 b.Click += (s, e) => ApplyAccent(color); swatches.Add(b);
-                Place(appearance, b, 16 + i % 4 * 40, 82 + i / 4 * 40);
+                Place(appearance, b, 14 + i % 4 * 40, 58 + i / 4 * 40);
             }
-            Place(appearance, Label("Custom", 12, true), 208, 82, 92, 20);
-            Place(appearance, accentField, 208, 110, 92, 32);
-            var helper = new Button { Content = "Palette / mixer", FontSize = 11, Padding = new Thickness(3), Width = 104 };
-            Place(appearance, helper, 202, 146, 104, 24);
-            helper.Click += (s, e) =>
-            {
-                colorPicker?.Close();
-                colorPicker = new ColorPicker(Theme.Accent) { Owner = this };
-                colorPicker.Picked += ApplyAccent; colorPicker.Show();
-            };
+            Place(appearance, Label("Custom", 12, true), 212, 70, 88, 16);
+            Place(appearance, accentField, 212, 104, 88, 32);
+            accentField.PreviewMouseLeftButtonDown += (s, e) => OpenColorHelper();
             accentField.Text = "#" + Theme.Accent.R.ToString("X2") + Theme.Accent.G.ToString("X2") + Theme.Accent.B.ToString("X2");
             accentField.TextChanged += (s, e) =>
             {
@@ -256,7 +241,7 @@ namespace SleepTimer
                 if (!hex.StartsWith("#")) hex = "#" + hex;
                 if (System.Text.RegularExpressions.Regex.IsMatch(hex, "^#[0-9A-Fa-f]{6}$")) ApplyAccent(Theme.Hex(hex), true);
             };
-            var timerCard = (Canvas)Card(2, 100, 236).Child;
+            var timerCard = (Canvas)Card(2, 88, 224).Child;
             Place(timerCard, Label("Quick timers"), 16, 16, 288, 24);
             Place(timerCard, Label("Start from the tray using the selected action.", 12, true), 16, 48, 288, 20);
             Place(timerCard, Label("Built in: 30 min, 1 h, 2 h, 4 h", 12, true), 16, 72, 288, 20);
@@ -266,8 +251,9 @@ namespace SleepTimer
             add.Click += (s, e) => AddQuickTimer();
             quickMinutes.KeyDown += (s, e) => { if (e.Key == Key.Enter) { AddQuickTimer(); e.Handled = true; } };
             quickNote.Text = "Enter 1–1440 minutes"; quickNote.Foreground = Theme.Brush(Theme.Faint);
-            Place(timerCard, quickNote, 16, 144, 288, 32);
-            Place(timerCard, customChip, 16, 184, 288, 32);
+            Place(timerCard, quickNote, 16, 144, 288, 20);
+            customChip.Style = (Style)FindResource("ChipButton");
+            Place(timerCard, customChip, 16, 176, 288, 32);
             customChip.Click += (s, e) => customMenu.Show(quickTimers.Custom.Select(m => new MenuRow
             {
                 Text = QuickTimers.Label(m), Right = "Remove", Click = () =>
@@ -296,7 +282,12 @@ namespace SleepTimer
         void SelectTab(int tab)
         {
             selectedTab = tab;
-            for (int i = 0; i < tabButtons.Count; i++) tabButtons[i].Foreground = Theme.Brush(i == tab ? Theme.Accent : Theme.Second);
+            for (int i = 0; i < tabButtons.Count; i++) tabButtons[i].Foreground = Theme.Brush(i == tab ? Theme.Text : Theme.Faint);
+            if (tabPositions.Count > tab)
+            {
+                tabSlide.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(tabSlide.X, tabPositions[tab], TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+                tabUnderline.BeginAnimation(WidthProperty, new DoubleAnimation(double.IsNaN(tabUnderline.Width) ? tabWidths[0] : tabUnderline.Width, tabWidths[tab], TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+            }
             foreach (var card in cards)
             {
                 bool shown = (int)card.Tag == tab;
@@ -315,7 +306,8 @@ namespace SleepTimer
             hide.Completed += (s, e) => { if ((settingsOpen ? main : settings) == from) from.Visibility = Visibility.Collapsed; };
             from.BeginAnimation(OpacityProperty, hide);
             to.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)));
-            gear.Content = settingsOpen ? "×" : "⚙"; Keyboard.ClearFocus();
+            ((GearMark)gear.Content).Active = settingsOpen; ((GearMark)gear.Content).InvalidateVisual();
+            gear.Background = settingsOpen ? Theme.Brush(Theme.Surface) : Brushes.Transparent; Keyboard.ClearFocus();
         }
 
         void SetMode(bool clock)
@@ -327,13 +319,30 @@ namespace SleepTimer
         }
         void SyncMode(bool animate)
         {
-            double x = clockMode ? 100 : 0;
+            double x = clockMode ? 0 : 54.6666667;
             if (animate) modeSlide.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(modeSlide.X, x, TimeSpan.FromMilliseconds(320)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
             else { modeSlide.BeginAnimation(TranslateTransform.XProperty, null); modeSlide.X = x; }
-            durationButton.Foreground = Theme.Brush(clockMode ? Theme.Second : Theme.Accent);
-            clockButton.Foreground = Theme.Brush(clockMode ? Theme.Accent : Theme.Second);
-            clockField.Visibility = clockMode ? Visibility.Visible : Visibility.Hidden;
+            modeSelector.Set(clockMode, animate);
+            if (clockMode) clockField.Visibility = Visibility.Visible;
+            if (animate)
+            {
+                var fade = new DoubleAnimation(clockField.Opacity, clockMode ? 1 : 0, TimeSpan.FromMilliseconds(320)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                fade.Completed += (s, e) => { if (!clockMode) clockField.Visibility = Visibility.Hidden; };
+                clockField.BeginAnimation(OpacityProperty, fade);
+            }
+            else
+            {
+                clockField.BeginAnimation(OpacityProperty, null); clockField.Opacity = clockMode ? 1 : 0;
+                clockField.Visibility = clockMode ? Visibility.Visible : Visibility.Hidden;
+            }
+            clockField.IsHitTestVisible = clockMode;
             if (!clockField.IsKeyboardFocusWithin) clockField.Text = TimeText.HourMinute(clockMinute);
+        }
+        void OpenColorHelper()
+        {
+            if (colorPicker != null && colorPicker.IsVisible) return;
+            colorPicker = new ColorPicker(Theme.Accent) { Owner = this };
+            colorPicker.Picked += ApplyAccent; colorPicker.Show();
         }
         void CommitClock()
         {
@@ -429,13 +438,15 @@ namespace SleepTimer
             Settings.Set("accent", hex);
             if (!fromField) { syncing = true; accentField.Text = hex; syncing = false; }
             AccentNote(); iconKey = null; SelectTab(selectedTab); SyncMode(false); UpdateView();
+            foreach (var visual in main.Children.OfType<FrameworkElement>().Concat(settings.Children.OfType<FrameworkElement>())) visual.InvalidateVisual();
+            picker.InvalidateVisual(); ((GearMark)gear.Content).InvalidateVisual();
         }
         void AccentNote()
         {
             double cr = Theme.Contrast(Theme.Accent, Theme.Bg);
             accentNote.Text = cr >= 3 ? "The ring, buttons, switches and the tray icon" : "Low contrast (" + cr.ToString("0.0", CultureInfo.InvariantCulture) + " : 1) — hard to read";
             accentNote.Foreground = Theme.Brush(cr >= 3 ? Theme.Faint : Theme.Danger);
-            foreach (var b in swatches) b.BorderBrush = Theme.Brush(string.Equals((string)b.Tag, accentField.Text, StringComparison.OrdinalIgnoreCase) ? Theme.Accent : Theme.Border);
+            foreach (var b in swatches) b.BorderBrush = Theme.Brush(string.Equals((string)b.Tag, accentField.Text, StringComparison.OrdinalIgnoreCase) ? Theme.Accent : Colors.Transparent);
         }
 
         bool screenOn;
@@ -554,10 +565,12 @@ namespace SleepTimer
                 face.Sub = state == TimerState.Running ? action.At + " " + DateTime.Now.AddSeconds(seconds).ToString("HH:mm") : "Resume to continue";
             }
             face.Tone = TimerStatus.Tone(state, seconds); face.UpdatePosition(seconds, animate, state == TimerState.Running);
-            picker.Content = action.Label + " ⌄"; picker.IsEnabled = mode.IsEnabled = idle;
+            picker.SetCurrent(action.Key); picker.IsEnabled = mode.IsEnabled = idle;
             forceSwitch.IsEnabled = action.Key != "sleep";
             string awake = awakeMinutes < 0 ? "on" : awakeMinutes > 0 ? TimeText.Clock(awakeEnd - clock.Elapsed.TotalSeconds) : null;
-            awakeChip.Content = awake == null ? "Off ⌄" : awakeMinutes < 0 ? "Indefinitely ⌄" : awake + " left ⌄";
+            awakeChip.Content = awake == null ? "Off" : awakeMinutes < 0 ? "Indefinitely" : awake + " left";
+            awakeChip.Background = Theme.Brush(awake == null ? Theme.Surface : Theme.Blend(Theme.Surface, Theme.Accent, .18));
+            awakeChip.Foreground = Theme.Brush(awake == null ? Theme.Second : Theme.Blend(Theme.Accent, Colors.White, .22));
             syncing = true; awakeSwitch.IsChecked = awake != null; syncing = false;
             if (awakeMenu.Visible) awakeMenu.SetRows(AwakeRows());
             if (trayMenu.Visible) trayMenu.SetRows(TrayRows());
@@ -653,7 +666,7 @@ namespace SleepTimer
             ticker.Stop(); aborted?.Stop();
             source?.RemoveHook(WindowMessage);
             face.Snap(0);
-            trayMenu.Dispose(); awakeMenu.Dispose(); actionMenu.Dispose(); customMenu.Dispose(); colorPicker?.Close();
+            trayMenu.Dispose(); awakeMenu.Dispose(); customMenu.Dispose(); colorPicker?.Close();
             tray.Visible = false; tray.Icon?.Dispose(); tray.Dispose();
             if (trayHandle != IntPtr.Zero) { Native.DestroyIcon(trayHandle); trayHandle = IntPtr.Zero; }
             Native.KeepAwake(false, false);

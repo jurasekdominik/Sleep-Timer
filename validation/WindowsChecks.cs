@@ -56,7 +56,9 @@ namespace SleepTimer
             image.Render(root);
             var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(image));
             Directory.CreateDirectory("validation-output");
-            using (var file = File.Create(Path.Combine("validation-output", name + ".png"))) png.Save(file);
+            string path = Path.Combine("validation-output", name + ".png");
+            using (var file = File.Create(path)) png.Save(file);
+            Console.WriteLine("PREVIEW:" + name + ":" + Convert.ToBase64String(File.ReadAllBytes(path)));
         }
         [STAThread] static int Main()
         {
@@ -132,8 +134,28 @@ namespace SleepTimer
                         var countdown = Field<Countdown>(visual, "countdown");
                         countdown.SetDuration(10800); Call(visual, "UpdateView", false); Pump(150);
                         Capture(visual, "wpf-main");
-                        Call(visual, "ToggleSettings"); Pump(300); Capture(visual, "wpf-settings");
-                        Call(visual, "SelectTab", 1); Pump(300); Capture(visual, "wpf-appearance");
+                        Check(Field<Canvas>(visual, "main").Children.OfType<BrandFooter>().Count() == 1, "Original wordmark missing");
+                        Check(Math.Abs(Field<TranslateTransform>(visual, "modeSlide").X - 54.6666667) < 1, "Duration selector is not centered");
+                        Call(visual, "SetMode", true); Pump(400);
+                        var clockBox = Field<TextBox>(visual, "clockField");
+                        var clockHost = (ScrollViewer)clockBox.Template.FindName("PART_ContentHost", clockBox);
+                        Check(clockBox.Text.Contains(":") && clockHost.ViewportHeight + 1 >= clockHost.ExtentHeight, "Clock text is vertically clipped");
+                        Check(Math.Abs(Field<TranslateTransform>(visual, "modeSlide").X) < 1, "At time selector did not slide left");
+                        Capture(visual, "wpf-clock");
+                        Call(visual, "SetMode", false); Pump(400);
+                        var selector = Field<ActionSelector>(visual, "picker");
+                        Call(selector, "SetOpen", true); Pump(300); Capture(visual, "wpf-action-selector");
+                        Call(selector, "SetOpen", false); Pump(300);
+                        Call(visual, "ToggleSettings"); Pump(300);
+                        var toggle = Field<ToggleButton>(visual, "forceSwitch");
+                        var thumb = (Border)toggle.Template.FindName("thumb", toggle);
+                        Check(((SolidColorBrush)thumb.Background).Color == Colors.White && thumb.Width == 28 && thumb.Height == 20, "Original switch capsule was changed");
+                        Capture(visual, "wpf-settings");
+                        Call(visual, "SelectTab", 1); Pump(300);
+                        var accentBox = Field<TextBox>(visual, "accentField");
+                        var accentHost = (ScrollViewer)accentBox.Template.FindName("PART_ContentHost", accentBox);
+                        Check(accentHost.ViewportHeight + 1 >= accentHost.ExtentHeight, "Hex field text is vertically clipped");
+                        Capture(visual, "wpf-appearance");
                         Call(visual, "SelectTab", 2); Pump(300); Capture(visual, "wpf-timers");
                         Call(visual, "ToggleSettings"); Pump(300);
                         var awake = Field<PopupMenu>(visual, "awakeMenu");
@@ -143,6 +165,9 @@ namespace SleepTimer
                             awake.Show(new[] { new MenuRow { Text = "Off" } }, anchor);
                             Pump(100);
                             Check(awake.Visible, "WPF popup did not reopen");
+                            var panel = Field<StackPanel>(awake, "items");
+                            var row = panel.Children.OfType<Button>().Single();
+                            Check(row.Height == 28 && row.Style == Application.Current.FindResource("MenuButton"), "Popup row uses boxed button styling");
                             awake.Close(); Pump(200);
                         }
                         SendMessage(new WindowInteropHelper(visual).Handle, 0x0112, (IntPtr)0xF100, IntPtr.Zero);

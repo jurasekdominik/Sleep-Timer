@@ -54,29 +54,35 @@ namespace SleepTimer
             r["BgBrush"] = Brush(Bg); r["SurfaceBrush"] = Brush(Surface);
             r["TextBrush"] = Brush(Text); r["SecondBrush"] = Brush(Second);
             r["BorderBrush"] = Brush(Border); r["AccentBrush"] = Brush(Accent);
+            r["Surface2Brush"] = Brush(Blend(Bg, Text, .09));
+            r["FaintBrush"] = Brush(Faint);
+            r["DangerSoftBrush"] = Brush(Blend(Bg, Danger, .14));
+            r["MenuEdgeBrush"] = Brush(Blend(Border, Blend(Bg, Text, .24), .8));
             r["SoftBrush"] = Brush(Blend(Surface, Accent, .18));
             r["OnAccentBrush"] = Brush(Contrast(Accent, Bg) >= Contrast(Accent, Colors.White) ? Bg : Colors.White);
         }
         const string Styles = @"
 <ResourceDictionary xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
  xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
+ <Style TargetType='Window'><Setter Property='Foreground' Value='{DynamicResource TextBrush}'/><Setter Property='FontFamily' Value='Segoe UI'/><Setter Property='FontSize' Value='14'/></Style>
  <Style TargetType='TextBlock'>
-  <Setter Property='Foreground' Value='{DynamicResource TextBrush}'/>
-  <Setter Property='FontFamily' Value='Segoe UI Variable Text, Segoe UI'/>
-  <Setter Property='FontSize' Value='14'/>
+  <Setter Property='FontFamily' Value='Segoe UI'/>
  </Style>
  <Style TargetType='Button'>
   <Setter Property='Foreground' Value='{DynamicResource TextBrush}'/>
   <Setter Property='Background' Value='{DynamicResource SurfaceBrush}'/>
   <Setter Property='BorderBrush' Value='{DynamicResource BorderBrush}'/>
   <Setter Property='Padding' Value='12,7'/><Setter Property='Cursor' Value='Hand'/>
-  <Setter Property='FontFamily' Value='Segoe UI Variable Text, Segoe UI'/>
+  <Setter Property='FontFamily' Value='Segoe UI'/>
   <Setter Property='FontSize' Value='14'/>
+  <Setter Property='HorizontalContentAlignment' Value='Center'/>
+  <Setter Property='VerticalContentAlignment' Value='Center'/>
+  <Setter Property='FocusVisualStyle' Value='{x:Null}'/>
   <Setter Property='Template'><Setter.Value>
    <ControlTemplate TargetType='Button'>
     <Border x:Name='box' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}'
-     BorderThickness='1' CornerRadius='8' Padding='{TemplateBinding Padding}'>
-     <ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>
+     BorderThickness='{TemplateBinding BorderThickness}' CornerRadius='8' Padding='{TemplateBinding Padding}'>
+     <ContentPresenter HorizontalAlignment='{TemplateBinding HorizontalContentAlignment}' VerticalAlignment='{TemplateBinding VerticalContentAlignment}'/>
     </Border>
     <ControlTemplate.Triggers>
      <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='box' Property='Background' Value='{DynamicResource SoftBrush}'/></Trigger>
@@ -87,6 +93,7 @@ namespace SleepTimer
   </Setter.Value></Setter>
  </Style>
  <Style x:Key='PrimaryButton' TargetType='Button' BasedOn='{StaticResource {x:Type Button}}'>
+  <Setter Property='BorderThickness' Value='0'/><Setter Property='FontWeight' Value='SemiBold'/>
   <Setter Property='Background' Value='{DynamicResource AccentBrush}'/>
   <Setter Property='Foreground' Value='{DynamicResource OnAccentBrush}'/>
  </Style>
@@ -95,16 +102,76 @@ namespace SleepTimer
   <Setter Property='Background' Value='{DynamicResource SurfaceBrush}'/>
   <Setter Property='BorderBrush' Value='{DynamicResource BorderBrush}'/>
   <Setter Property='CaretBrush' Value='{DynamicResource AccentBrush}'/>
-  <Setter Property='Padding' Value='9,6'/><Setter Property='FontSize' Value='14'/>
+  <Setter Property='Padding' Value='9,3'/><Setter Property='FontSize' Value='14'/>
+  <Setter Property='FontFamily' Value='Segoe UI'/><Setter Property='VerticalContentAlignment' Value='Center'/>
+  <Setter Property='MinHeight' Value='32'/>
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='TextBox'>
    <Border x:Name='box' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}'
-    BorderThickness='1' CornerRadius='8' Padding='{TemplateBinding Padding}'>
-    <ScrollViewer x:Name='PART_ContentHost'/>
+    BorderThickness='1' CornerRadius='8'>
+    <ScrollViewer x:Name='PART_ContentHost' Focusable='False' Margin='{TemplateBinding Padding}' VerticalAlignment='{TemplateBinding VerticalContentAlignment}'/>
    </Border>
    <ControlTemplate.Triggers>
     <Trigger Property='IsKeyboardFocused' Value='True'><Setter TargetName='box' Property='BorderBrush' Value='{DynamicResource AccentBrush}'/></Trigger>
     <Trigger Property='IsEnabled' Value='False'><Setter TargetName='box' Property='Opacity' Value='.4'/></Trigger>
    </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+
+ <Style x:Key='TextButton' TargetType='Button' BasedOn='{StaticResource {x:Type Button}}'>
+  <Setter Property='BorderThickness' Value='0'/><Setter Property='Background' Value='Transparent'/>
+  <Setter Property='Padding' Value='0'/><Setter Property='Template'><Setter.Value>
+   <ControlTemplate TargetType='Button'>
+    <ContentPresenter HorizontalAlignment='{TemplateBinding HorizontalContentAlignment}' VerticalAlignment='Center'/>
+    <ControlTemplate.Triggers><Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='.4'/></Trigger></ControlTemplate.Triggers>
+   </ControlTemplate>
+  </Setter.Value></Setter>
+ </Style>
+ <Style x:Key='MenuButton' TargetType='Button' BasedOn='{StaticResource {x:Type Button}}'>
+  <Setter Property='BorderThickness' Value='0'/><Setter Property='Background' Value='Transparent'/>
+  <Setter Property='Padding' Value='12,0'/><Setter Property='Height' Value='28'/>
+  <Setter Property='HorizontalContentAlignment' Value='Stretch'/>
+  <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Button'>
+   <Border x:Name='box' CornerRadius='6' Margin='4,0' Background='{TemplateBinding Background}' Padding='{TemplateBinding Padding}'>
+    <ContentPresenter HorizontalAlignment='Stretch' VerticalAlignment='Center'/>
+   </Border>
+   <ControlTemplate.Triggers>
+    <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='box' Property='Background' Value='{DynamicResource SoftBrush}'/></Trigger>
+    <Trigger Property='IsKeyboardFocused' Value='True'><Setter TargetName='box' Property='Background' Value='{DynamicResource SoftBrush}'/></Trigger>
+    <MultiTrigger><MultiTrigger.Conditions><Condition Property='Tag' Value='danger'/><Condition Property='IsMouseOver' Value='True'/></MultiTrigger.Conditions><Setter TargetName='box' Property='Background' Value='{DynamicResource DangerSoftBrush}'/></MultiTrigger>
+    <Trigger Property='IsEnabled' Value='False'><Setter TargetName='box' Property='Opacity' Value='.4'/></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key='ChipButton' TargetType='Button' BasedOn='{StaticResource {x:Type Button}}'>
+  <Setter Property='Foreground' Value='{DynamicResource SecondBrush}'/><Setter Property='BorderThickness' Value='0'/>
+  <Setter Property='Padding' Value='16,0,14,0'/><Setter Property='Height' Value='32'/>
+  <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Button'>
+   <Border x:Name='box' CornerRadius='16' Background='{TemplateBinding Background}' BorderThickness='{TemplateBinding BorderThickness}' BorderBrush='{TemplateBinding BorderBrush}' Padding='{TemplateBinding Padding}'>
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width='12'/></Grid.ColumnDefinitions>
+     <ContentPresenter HorizontalAlignment='Left' VerticalAlignment='Center'/>
+     <Path Grid.Column='1' Data='M 1,4 L 5,8 L 9,4' Stroke='{TemplateBinding Foreground}' StrokeThickness='1.6' StrokeStartLineCap='Round' StrokeEndLineCap='Round' VerticalAlignment='Center'/>
+    </Grid>
+   </Border>
+   <ControlTemplate.Triggers>
+    <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='box' Property='Background' Value='{DynamicResource Surface2Brush}'/></Trigger>
+    <Trigger Property='IsEnabled' Value='False'><Setter TargetName='box' Property='Opacity' Value='.4'/></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key='SwatchButton' TargetType='Button' BasedOn='{StaticResource {x:Type Button}}'>
+  <Setter Property='BorderThickness' Value='2'/><Setter Property='BorderBrush' Value='Transparent'/>
+  <Setter Property='Padding' Value='2'/><Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Button'>
+   <Border x:Name='box' CornerRadius='20' Background='Transparent' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='2' Padding='2'>
+    <ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>
+   </Border>
+   <ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='box' Property='BorderBrush' Value='{DynamicResource FaintBrush}'/></Trigger></ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key='IconButton' TargetType='Button' BasedOn='{StaticResource {x:Type Button}}'>
+  <Setter Property='BorderThickness' Value='0'/><Setter Property='Padding' Value='0'/><Setter Property='Background' Value='Transparent'/>
+  <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Button'>
+   <Border x:Name='box' CornerRadius='15' Background='{TemplateBinding Background}'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/></Border>
+   <ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='box' Property='Background' Value='{DynamicResource SurfaceBrush}'/></Trigger></ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style TargetType='ToggleButton'>
@@ -113,7 +180,7 @@ namespace SleepTimer
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='ToggleButton'>
    <Grid x:Name='box'>
     <Border x:Name='track' CornerRadius='12' Background='{DynamicResource BorderBrush}'/>
-    <Border x:Name='thumb' Width='28' Height='20' CornerRadius='10' Background='{DynamicResource TextBrush}'
+    <Border x:Name='thumb' Width='28' Height='20' CornerRadius='10' Background='White'
      HorizontalAlignment='Left' Margin='2,0,0,0'>
      <Border.RenderTransform><TranslateTransform x:Name='slide'/></Border.RenderTransform>
     </Border>
@@ -121,7 +188,6 @@ namespace SleepTimer
    <ControlTemplate.Triggers>
     <Trigger Property='IsChecked' Value='True'>
      <Setter TargetName='track' Property='Background' Value='{DynamicResource AccentBrush}'/>
-     <Setter TargetName='thumb' Property='Background' Value='{DynamicResource OnAccentBrush}'/>
      <Trigger.EnterActions><BeginStoryboard><Storyboard>
       <DoubleAnimation Storyboard.TargetName='slide' Storyboard.TargetProperty='X' To='12' Duration='0:0:0.24'>
        <DoubleAnimation.EasingFunction><CubicEase EasingMode='EaseOut'/></DoubleAnimation.EasingFunction>
@@ -261,7 +327,7 @@ namespace SleepTimer
         void DrawText(DrawingContext g, string text, double y, double size, Color color, bool bold = false)
         {
             var ft = new FormattedText(text ?? "", CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-                new Typeface(new FontFamily("Segoe UI Variable Display, Segoe UI"), FontStyles.Normal, bold ? FontWeights.SemiBold : FontWeights.Normal, FontStretches.Normal),
+                new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, bold ? FontWeights.SemiBold : FontWeights.Normal, FontStretches.Normal),
                 size, Theme.Brush(color), VisualTreeHelper.GetDpi(this).PixelsPerDip);
             ft.MaxTextWidth = ActualWidth; ft.TextAlignment = TextAlignment.Center;
             g.DrawText(ft, new Point(0, y));
@@ -314,9 +380,9 @@ namespace SleepTimer
         public PopupMenu(int width = 224)
         {
             border = new Border { Width = width, CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1),
-                Padding = new Thickness(6), Child = new ScrollViewer { Content = items, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 520 } };
+                Padding = new Thickness(0, 4, 0, 4), Child = new ScrollViewer { Content = items, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 520 } };
             border.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
-            border.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+            border.SetResourceReference(Border.BorderBrushProperty, "MenuEdgeBrush");
             popup.Child = border;
             popup.Closed += (s, e) => closed.Restart();
             popup.Opened += (s, e) =>
@@ -335,7 +401,7 @@ namespace SleepTimer
             items.Children.Clear();
             foreach (var row in next)
             {
-                if (row.Separator) { items.Children.Add(new Border { Height = 1, Background = Theme.Brush(Theme.Border), Margin = new Thickness(6, 5, 6, 5) }); continue; }
+                if (row.Separator) { items.Children.Add(new Border { Height = 1, Background = Theme.Brush(Theme.Border), Margin = new Thickness(12, 4, 12, 4) }); continue; }
                 var grid = new Grid();
                 grid.ColumnDefinitions.Add(new ColumnDefinition());
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -348,8 +414,8 @@ namespace SleepTimer
                     Grid.SetColumn(right, 1); grid.Children.Add(right);
                 }
                 if (row.Header) { grid.Margin = new Thickness(10, 7, 10, 7); items.Children.Add(grid); continue; }
-                var button = new Button { Content = grid, IsEnabled = row.Enabled, HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                    Padding = new Thickness(10, 7, 10, 7), BorderThickness = new Thickness(0), Background = row.Selected ? Theme.Brush(Theme.Blend(Theme.Surface, Theme.Accent, .06)) : Brushes.Transparent };
+                var button = new Button { Content = grid, IsEnabled = row.Enabled, Tag = row.Danger ? "danger" : null, Style = (Style)Application.Current.FindResource("MenuButton"),
+                    Background = row.Selected ? Theme.Brush(Theme.Blend(Theme.Surface, Theme.Accent, .06)) : Brushes.Transparent };
                 button.Click += (s, e) => { if (!row.KeepOpen) Close(); row.Click?.Invoke(); };
                 items.Children.Add(button);
             }
