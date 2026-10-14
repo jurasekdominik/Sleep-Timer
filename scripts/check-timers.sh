@@ -128,6 +128,11 @@ class Checks
         if (TimerDial.For(7200.25).HourFill <= TimerDial.For(7200.1).HourFill)
             throw new Exception("hour fading needs continuous subsecond progress");
         checks++;
+        Equal(TimerDial.ArcFraction(3600), 1, "exact hour draws full ring");
+        Equal(TimerDial.ArcFraction(3630), 30d / 3600, "forward animation wraps through top");
+        Equal(TimerDial.ArcFraction(3570), 3570d / 3600, "backward animation wraps through top");
+        Equal(TimerDial.ArcFraction(10830), 30d / 3600, "later revolutions wrap identically");
+        Equal(TimerDial.ArcFraction(0), 0, "expired animated arc is empty");
         var stop = new HourStop();
         Equal(stop.Adjust(3300, 900, 0), 300, "coarse wheel snaps to first hour");
         Equal(stop.Adjust(3600, 300, 399), 0, "hour hold lasts 400 ms");

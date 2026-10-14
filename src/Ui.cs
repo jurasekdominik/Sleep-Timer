@@ -468,22 +468,22 @@ namespace SleepTimer
         {
             bool motion = Visible && (animate || State == TimerState.Running);
             var next = TimerDial.For(seconds);
-            bool hourChanged = next.ExtraHours != dial.ExtraHours;
             if (Math.Abs(hours.Value - next.HourFill) > 0.000001)
             {
                 if (motion) hours.To(next.HourFill);
                 else hours.Set(next.HourFill);
             }
             dial = next;
-            double fraction = dial.Fraction(seconds);
-            // Snap across the hour boundary rather than sweeping backwards around the dial.
-            if (hourChanged && !animate) sweep.Set(fraction);
-            else SetFraction(fraction, motion);
+            // Animate total seconds, then wrap only while painting. The moving edge keeps
+            // its direction when crossing twelve o'clock instead of reversing around the dial.
+            double position = Math.Max(0, Math.Min(Countdown.MaxSet, seconds));
+            if (motion) sweep.To(position);
+            else sweep.Set(position);
         }
 
         public Ring()
         {
-            sweep = Own(new Tween(160, 1, Invalidate, linear: true));
+            sweep = Own(new Tween(160, 1800, Invalidate, linear: true));
             hours = Own(new Tween(Motion.Progress, 0, Invalidate, linear: true));
             wheelFrame = Own(new Timer { Interval = 16 });
             wheelFrame.Tick += (s, e) => FlushWheel();
@@ -492,13 +492,7 @@ namespace SleepTimer
         public event Action<int> Wheel;
         public event Action ToggleClicked, CancelClicked;
 
-        public void SetFraction(double f, bool animate)
-        {
-            if (animate) sweep.To(f);
-            else if (!sweep.Running) sweep.Set(f);
-        }
-
-        public void Snap(double f) => sweep.Set(f);
+        public void Snap(double seconds) => sweep.Set(seconds);
 
         float Side => Math.Min(Width, Height) - Theme.D(40);
         PointF Center => new PointF(Width / 2f, Height / 2f);
@@ -567,7 +561,7 @@ namespace SleepTimer
 
             Color c1 = Theme.TimerColor(Tone);
 
-            double shown = sweep.Value;
+            double shown = TimerDial.ArcFraction(sweep.Value);
             if (shown > 0.001) DrawArc(g, rect, shown, stroke, c1);
             DrawTicks(g, c, side / 2, c1);
             DrawHours(g, c, side / 2 - stroke / 2 - 8 * Theme.S, c1);

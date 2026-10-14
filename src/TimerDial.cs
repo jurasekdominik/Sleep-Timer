@@ -32,12 +32,15 @@ namespace SleepTimer
         static double WholeSeconds(double remaining) => Math.Ceiling(Math.Max(0, Math.Min(Countdown.MaxSet, remaining)));
         public static TimerDial For(double remaining) => new TimerDial(remaining);
 
-        public double Fraction(double remaining)
+        public double Fraction(double remaining) => ArcFraction(remaining);
+
+        /// <summary>Wrap an animated total-second position into the current hourly arc.</summary>
+        public static double ArcFraction(double remaining)
         {
             double seconds = Math.Max(0, Math.Min(Countdown.MaxSet, remaining));
             if (seconds == 0) return 0;
-            double part = seconds % Seconds;
-            return part == 0 ? 1 : part / Seconds;
+            double part = seconds % 3600;
+            return part == 0 ? 1 : part / 3600;
         }
     }
 }

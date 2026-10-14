@@ -48,6 +48,20 @@ namespace SleepTimer
                     var ring = Field<Ring>(form, "ring");
                     Set(form, "clockMode", false); Call(form, "SyncMode", false); Call(form, "SetAction", "shutdown");
                     timer.SetDuration(1800); Call(form, "UpdateView", false); Pump(200);
+                    // Sample the real UI tween on both sides of an hourly rollover.
+                    ring.SetTime(3600, false);
+                    ring.SetTime(3660, true);
+                    Pump(60);
+                    var arc = Field<Tween>(ring, "sweep");
+                    Check(arc.Value >= 3600 && arc.Value <= 3660, "Adding across hour reversed animation");
+                    Pump(180);
+                    Check(Math.Abs(arc.Value - 3660) < .001, "Forward animation missed its target");
+                    ring.SetTime(3660, false);
+                    ring.SetTime(3360, true);
+                    Pump(60);
+                    Check(arc.Value >= 3360 && arc.Value <= 3660, "Subtracting across hour reversed animation");
+                    Pump(180);
+                    Check(Math.Abs(arc.Value - 3360) < .001, "Backward animation missed its target");
                     Call(form, "StartQuickTimer", 150); timer.Pause(); Call(form, "UpdateView", false); Pump(200);
                     Set(form, "trayQuickPage", true); Set(form, "trayQuickActionPage", true);
                     var actions = (System.Collections.Generic.List<PickRow>)form.GetType().GetMethod("TrayRows", Private).Invoke(form, null);
