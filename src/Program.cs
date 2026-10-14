@@ -25,6 +25,7 @@ namespace SleepTimer
             using (var window = new MainWindow())
             {
                 app.MainWindow = window;
+                app.SessionEnding += (s, e) => window.EndSession();
                 if (args.Contains("--verify-startup"))
                 {
                     window.TestMode = true;

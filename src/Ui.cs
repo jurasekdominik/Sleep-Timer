@@ -297,7 +297,7 @@ namespace SleepTimer
     sealed class MenuRow
     {
         public string Text, Right;
-        public bool Selected, Header, Separator, Danger, KeepOpen, Enabled = true;
+        public bool Selected, Header = false, Separator, Danger, KeepOpen, Enabled = true;
         public Action Click;
     }
 
@@ -308,6 +308,7 @@ namespace SleepTimer
         readonly Border border;
         readonly StackPanel items = new StackPanel();
         readonly Stopwatch closed = new Stopwatch();
+        string rowSignature;
         public bool Visible => popup.IsOpen;
         public bool JustClosed => closed.IsRunning && closed.ElapsedMilliseconds < 180;
         public PopupMenu(int width = 224)
@@ -327,8 +328,12 @@ namespace SleepTimer
         }
         public void SetRows(IEnumerable<MenuRow> rows)
         {
+            var next = rows.ToArray();
+            string signature = string.Join("|", next.Select(r => r.Text + "~" + r.Right + "~" + r.Selected + "~" + r.Enabled + "~" + r.Separator + "~" + r.Header));
+            if (signature == rowSignature) return;
+            rowSignature = signature;
             items.Children.Clear();
-            foreach (var row in rows)
+            foreach (var row in next)
             {
                 if (row.Separator) { items.Children.Add(new Border { Height = 1, Background = Theme.Brush(Theme.Border), Margin = new Thickness(6, 5, 6, 5) }); continue; }
                 var grid = new Grid();

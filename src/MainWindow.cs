@@ -54,7 +54,7 @@ namespace SleepTimer
         PowerAction action, quickAction;
         int clockMinute, awakeMinutes, lastQuickMinutes, trayPage, selectedTab;
         double awakeEnd;
-        bool clockMode, clockTouched, settingsOpen, syncing, durationDirty, warned, executing, quitting, disposed;
+        bool clockMode, clockTouched, settingsOpen, syncing, durationDirty, warned, executing, quitting, disposed, sessionEnding;
         string iconKey;
         IntPtr trayHandle;
         HwndSource source;
@@ -99,7 +99,7 @@ namespace SleepTimer
             Closing += (s, e) =>
             {
                 if (!quitting) { e.Cancel = true; Hide(); return; }
-                if (!TestMode && countdown.State != TimerState.Idle && !ConfirmQuit()) { quitting = false; e.Cancel = true; return; }
+                if (!TestMode && !sessionEnding && countdown.State != TimerState.Idle && !ConfirmQuit()) { quitting = false; e.Cancel = true; return; }
                 Dispose();
                 if (!TestMode) Application.Current.Shutdown();
             };
@@ -279,7 +279,7 @@ namespace SleepTimer
         }
         static void SwitchRow(Canvas parent, string title, string note, ToggleButton toggle, double y)
         {
-            var label = Label(title), detail = Label(note, 12, true);
+            TextBlock label = Label(title), detail = Label(note, 12, true);
             Place(parent, label, 20, y + 12, 230, 20);
             Place(parent, detail, 20, y + 34, 230, 18);
             Place(parent, toggle, 256, y + 20);
@@ -428,7 +428,7 @@ namespace SleepTimer
             string hex = "#" + color.R.ToString("X2") + color.G.ToString("X2") + color.B.ToString("X2");
             Settings.Set("accent", hex);
             if (!fromField) { syncing = true; accentField.Text = hex; syncing = false; }
-            AccentNote(); iconKey = null; SelectTab(selectedTab); UpdateView();
+            AccentNote(); iconKey = null; SelectTab(selectedTab); SyncMode(false); UpdateView();
         }
         void AccentNote()
         {
@@ -634,6 +634,7 @@ namespace SleepTimer
             dialog.SourceInitialized += (s, e) => Native.DarkTitlebar(new WindowInteropHelper(dialog).Handle);
             return dialog.ShowDialog() == true;
         }
+        public void EndSession() { sessionEnding = quitting = true; }
         void Quit() { quitting = true; Close(); }
         IntPtr WindowMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {

@@ -21,7 +21,7 @@ jobs:
           dotnet-version: '8.0.x'
       - run: bash scripts/check-timers.sh
       # WPF needs Windows desktop build targets; portable logic still runs on Linux.
-      - if: github.ref != 'refs/heads/WPF'
+      - if: github.ref != 'refs/heads/WPF' && github.head_ref != 'WPF'
         run: dotnet build SleepTimer.csproj -c Release --nologo -warnaserror
   windows:
     runs-on: windows-latest
