@@ -33,6 +33,7 @@ namespace SleepTimer
 
         readonly Stopwatch clock = Stopwatch.StartNew();
         readonly Countdown countdown;
+        readonly HourStop hourStop = new HourStop();
         readonly ToolTip tooltips = new ToolTip();
         System.Windows.Forms.Timer aborted;
         bool durationDirty, resourcesDisposed;
@@ -340,6 +341,7 @@ namespace SleepTimer
         {
             if (!ring.Interactive) return;
             ring.FlushWheel();
+            hourStop.Reset();
             durationDirty = false;
             countdown.Reset();
             SetAction(quickAction.Key);
@@ -538,6 +540,7 @@ namespace SleepTimer
         void SetMode(bool clock)
         {
             if (countdown.State != TimerState.Idle) return;
+            hourStop.Reset();
             clockMode = clock;
             if (clock && !clockTouched) clockMinute = TimeText.DefaultClock(DateTime.Now, countdown.Duration);
             Settings.Set("clock_mode", clock);
@@ -547,24 +550,28 @@ namespace SleepTimer
 
         void AddTime(int delta)
         {
+            double current = countdown.State == TimerState.Idle
+                ? clockMode ? clockMinute * 60 : countdown.Duration : countdown.Remaining;
+            double adjustment = hourStop.Adjust(current, delta, clock.Elapsed.TotalMilliseconds);
+            if (adjustment == 0) return;
             if (countdown.State == TimerState.Idle)
             {
                 if (clockMode)
                 {
-                    clockMinute = ((clockMinute + delta / 60) % 1440 + 1440) % 1440;
+                    clockMinute = ((clockMinute + (int)(adjustment / 60)) % 1440 + 1440) % 1440;
                     clockTouched = true;
                     modeRow.Time.Minutes = clockMinute;
                 }
                 else
                 {
-                    countdown.SetDuration(countdown.Duration + delta);
+                    countdown.SetDuration(countdown.Duration + (int)adjustment);
                     durationDirty = true;
                     wheelSave.Restart();
                 }
             }
             else
             {
-                countdown.Adjust(delta);
+                countdown.Adjust(adjustment);
                 if (countdown.Remaining > WarnSeconds) warned = false;
             }
             UpdateView(true);
@@ -573,6 +580,7 @@ namespace SleepTimer
         void StartPause()
         {
             ring.FlushWheel();
+            hourStop.Reset();
             SaveDuration();
             switch (countdown.State)
             {
@@ -596,6 +604,7 @@ namespace SleepTimer
 
         void Cancel()
         {
+            hourStop.Reset();
             countdown.Reset();
             ApplyAwake();
             UpdateView(true);

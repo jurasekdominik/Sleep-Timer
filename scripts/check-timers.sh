@@ -128,6 +128,23 @@ class Checks
         if (TimerDial.For(7200.25).HourFill <= TimerDial.For(7200.1).HourFill)
             throw new Exception("hour fading needs continuous subsecond progress");
         checks++;
+        var stop = new HourStop();
+        Equal(stop.Adjust(3300, 900, 0), 300, "coarse wheel snaps to first hour");
+        Equal(stop.Adjust(3600, 300, 399), 0, "hour hold lasts 400 ms");
+        Equal(stop.Adjust(3600, 300, 400), 300, "hour hold ends at 400 ms");
+        stop.Reset();
+        Equal(stop.Adjust(3900, -1800, 0), -300, "descending hour snap");
+        Equal(stop.Adjust(3600, 60, 1), 60, "reversal bypasses hour hold");
+        stop.Reset();
+        Equal(stop.Adjust(3300, 86400, 0), 300, "burst stops at first crossed hour");
+        Equal(stop.Adjust(3600, 86400, 400), 3600, "continued burst stops at next hour");
+        stop.Reset();
+        Equal(stop.Adjust(3300, 300, 0), 300, "exact landing starts hold");
+        Equal(stop.Adjust(3599.6, 60, 399), 0, "countdown keeps ticking during hold");
+        Equal(stop.Adjust(3599.6, 60, 400), 60, "countdown drift does not retrigger same stop");
+        stop.Reset();
+        Equal(stop.Adjust(3600, -60, 0), -60, "scroll away from initial whole hour");
+        Equal(stop.Adjust(60, -300, 500), -300, "zero is not an hour stop");
         var wheel = new WheelInput();
         for (int i = 0; i < 7; i++) Equal(wheel.Add(15, 300), 0, "partial wheel delta");
         Equal(wheel.Add(15, 300), 300, "eight small deltas make one notch");

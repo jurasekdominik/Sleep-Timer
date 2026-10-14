@@ -71,9 +71,11 @@ namespace SleepTimer
                     timer.SetDuration(1800);
                     for (int i = 0; i < 5000; i++) wheel.Invoke(ring, new object[] {new MouseEventArgs(MouseButtons.None, 0, 0, 0, 12)});
                     ring.FlushWheel();
-                    Check(timer.Duration == Countdown.MaxSet, "Fast-wheel batching lost duration changes");
-                    for (int i = 0; i < 20; i++) wheel.Invoke(ring, new object[] {new MouseEventArgs(MouseButtons.None, 0, 0, 0, -120)});
-                    ring.FlushWheel(); Check(timer.Duration == Countdown.MaxSet - 6000, "Wheel reversal was delayed");
+                    Check(timer.Duration == 3600, "Fast-wheel burst skipped the first hour stop");
+                    wheel.Invoke(ring, new object[] {new MouseEventArgs(MouseButtons.None, 0, 0, 0, 120)});
+                    ring.FlushWheel(); Check(timer.Duration == 3600, "Wheel input bypassed the hour hold");
+                    wheel.Invoke(ring, new object[] {new MouseEventArgs(MouseButtons.None, 0, 0, 0, -120)});
+                    ring.FlushWheel(); Check(timer.Duration == 3300, "Wheel reversal was delayed by hour hold");
                 }
                 // Warm caches before checking that repeated construction/disposal does not grow GDI objects.
                 for (int i = 0; i < 3; i++) using (var f = Open()) Pump(20);
