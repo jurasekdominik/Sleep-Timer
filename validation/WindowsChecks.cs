@@ -133,6 +133,7 @@ namespace SleepTimer
                     {
                         var countdown = Field<Countdown>(visual, "countdown");
                         countdown.SetDuration(10800); Call(visual, "UpdateView", false); Pump(150);
+                        Check(((FrameworkElement)visual.Content).ActualHeight >= 508, "Client area clips the footer");
                         Capture(visual, "wpf-main");
                         Check(Field<Canvas>(visual, "main").Children.OfType<BrandFooter>().Count() == 1, "Original wordmark missing");
                         Check(Math.Abs(Field<TranslateTransform>(visual, "modeSlide").X - 54.6666667) < 1, "Duration selector is not centered");
@@ -155,6 +156,7 @@ namespace SleepTimer
                         var accentBox = Field<TextBox>(visual, "accentField");
                         var accentHost = (ScrollViewer)accentBox.Template.FindName("PART_ContentHost", accentBox);
                         Check(accentHost.ViewportHeight + 1 >= accentHost.ExtentHeight, "Hex field text is vertically clipped");
+                        Check(accentHost.ViewportWidth + 1 >= accentHost.ExtentWidth, "Hex field text is horizontally clipped");
                         Capture(visual, "wpf-appearance");
                         Call(visual, "SelectTab", 2); Pump(300); Capture(visual, "wpf-timers");
                         Call(visual, "ToggleSettings"); Pump(300);

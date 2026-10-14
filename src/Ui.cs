@@ -108,7 +108,7 @@ namespace SleepTimer
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='TextBox'>
    <Border x:Name='box' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}'
     BorderThickness='1' CornerRadius='8'>
-    <ScrollViewer x:Name='PART_ContentHost' Focusable='False' Margin='{TemplateBinding Padding}' VerticalAlignment='{TemplateBinding VerticalContentAlignment}'/>
+    <ScrollViewer x:Name='PART_ContentHost' Focusable='False' Margin='0' VerticalAlignment='{TemplateBinding VerticalContentAlignment}'/>
    </Border>
    <ControlTemplate.Triggers>
     <Trigger Property='IsKeyboardFocused' Value='True'><Setter TargetName='box' Property='BorderBrush' Value='{DynamicResource AccentBrush}'/></Trigger>
@@ -410,12 +410,14 @@ namespace SleepTimer
                 grid.Children.Add(label);
                 if (!string.IsNullOrEmpty(row.Right))
                 {
-                    var right = new TextBlock { Text = row.Right, FontSize = 12, Margin = new Thickness(12, 0, 0, 0), Foreground = Theme.Brush(Theme.Second), VerticalAlignment = VerticalAlignment.Center };
+                    var right = new TextBlock { Text = row.Right, FontSize = 14, Margin = new Thickness(12, 0, 0, 0), Foreground = Theme.Brush(Theme.Faint), VerticalAlignment = VerticalAlignment.Center };
                     Grid.SetColumn(right, 1); grid.Children.Add(right);
                 }
                 if (row.Header) { grid.Margin = new Thickness(10, 7, 10, 7); items.Children.Add(grid); continue; }
                 var button = new Button { Content = grid, IsEnabled = row.Enabled, Tag = row.Danger ? "danger" : null, Style = (Style)Application.Current.FindResource("MenuButton"),
                     Background = row.Selected ? Theme.Brush(Theme.Blend(Theme.Surface, Theme.Accent, .06)) : Brushes.Transparent };
+                button.MouseEnter += (s, e) => label.Foreground = Theme.Brush(row.Danger ? Theme.Blend(Theme.Danger, Colors.White, .3) : Theme.Blend(Theme.Accent, Colors.White, .22));
+                button.MouseLeave += (s, e) => label.Foreground = Theme.Brush(row.Danger ? Theme.Blend(Theme.Danger, Colors.White, .3) : row.Selected ? Theme.Accent : Theme.Text);
                 button.Click += (s, e) => { if (!row.KeepOpen) Close(); row.Click?.Invoke(); };
                 items.Children.Add(button);
             }

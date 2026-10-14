@@ -72,10 +72,11 @@ namespace SleepTimer
             awakeMinutes = Settings.Get("awake", false) ? -1 : 0;
             screenOn = Settings.Get("awake_screen", false);
             if (startupSwitch.IsChecked == true) Startup.Set(true);
-            Title = "Sleep Timer"; Width = 384; Height = 548;
+            Title = "Sleep Timer"; SizeToContent = SizeToContent.WidthAndHeight;
+            root.Width = 368; root.Height = 508; root.Background = Theme.Brush(Theme.Bg);
             ResizeMode = ResizeMode.CanMinimize; WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Background = Theme.Brush(Theme.Bg); Content = root;
-            FontFamily = new FontFamily("Segoe UI"); FontSize = 14;
+            FontFamily = new FontFamily("Segoe UI"); FontSize = 14; Foreground = Theme.Brush(Theme.Text);
             TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
             TextOptions.SetTextRenderingMode(this, TextRenderingMode.ClearType);
             UseLayoutRounding = true; SnapsToDevicePixels = true;

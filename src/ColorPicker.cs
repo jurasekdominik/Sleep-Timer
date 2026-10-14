@@ -35,8 +35,8 @@ namespace SleepTimer
         public event Action<Color> Picked;
         public ColorPicker(Color current)
         {
-            Title = "Accent colour"; Width = 540; Height = 356; ResizeMode = ResizeMode.NoResize;
-            WindowStartupLocation = WindowStartupLocation.CenterOwner; ShowInTaskbar = false; Background = Theme.Brush(Theme.Bg);
+            Title = "Accent colour"; Width = 540; SizeToContent = SizeToContent.Height; ResizeMode = ResizeMode.NoResize;
+            WindowStartupLocation = WindowStartupLocation.CenterOwner; ShowInTaskbar = false; Background = Theme.Brush(Theme.Bg); Foreground = Theme.Brush(Theme.Text);
             var panel = new StackPanel { Margin = new Thickness(16) };
             var tabs = new StackPanel { Orientation = Orientation.Horizontal };
             var paletteTab = new Button { Content = "PALETTE", Margin = new Thickness(0, 0, 8, 0) };
