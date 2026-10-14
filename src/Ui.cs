@@ -200,10 +200,10 @@ namespace SleepTimer
     }
 
     /// <summary>Eased (out-cubic) value animation driven by a UI timer. While it runs the system timer
-    /// resolution is 1 ms; animation frames are capped at approximately 60 Hz.</summary>
+    /// resolution is 1 ms; animation frames are requested at approximately 144 Hz.</summary>
     sealed class Tween : IDisposable
     {
-        readonly Timer timer = new Timer { Interval = 16 };
+        readonly Timer timer = new Timer { Interval = 7 };
         bool disposed;
         readonly Stopwatch clock = new Stopwatch();
         readonly int duration;
