@@ -54,14 +54,24 @@ namespace SleepTimer
                     Pump(60);
                     var arc = Field<Tween>(ring, "sweep");
                     Check(arc.Value >= 3600 && arc.Value <= 3660, "Adding across hour reversed animation");
-                    Pump(180);
+                    Pump(380);
                     Check(Math.Abs(arc.Value - 3660) < .001, "Forward animation missed its target");
                     ring.SetTime(3660, false);
                     ring.SetTime(3360, true);
                     Pump(60);
                     Check(arc.Value >= 3360 && arc.Value <= 3660, "Subtracting across hour reversed animation");
-                    Pump(180);
+                    Pump(380);
                     Check(Math.Abs(arc.Value - 3360) < .001, "Backward animation missed its target");
+                    ring.SetTime(1800, false);
+                    ring.SetTime(3600, true);
+                    Pump(60);
+                    double before = arc.Value;
+                    Check(before > 1800 && before < 3600, "Large increment did not show sweep progress");
+                    ring.SetTime(3600, false); // Same target from periodic view refresh.
+                    Pump(100);
+                    Check(arc.Value > before && arc.Value < 3600, "View refresh interrupted sweep progress");
+                    Pump(380);
+                    Check(Math.Abs(arc.Value - 3600) < .001, "Animated increment did not reach target");
                     Call(form, "StartQuickTimer", 150); timer.Pause(); Call(form, "UpdateView", false); Pump(200);
                     Set(form, "trayQuickPage", true); Set(form, "trayQuickActionPage", true);
                     var actions = (System.Collections.Generic.List<PickRow>)form.GetType().GetMethod("TrayRows", Private).Invoke(form, null);

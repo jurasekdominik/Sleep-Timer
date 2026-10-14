@@ -225,7 +225,7 @@ namespace SleepTimer
 
         public void To(double target)
         {
-            if (disposed) return;
+            if (disposed || target == to) return;
             if (Running) Sample();
             from = Value;
             to = target;
@@ -457,6 +457,7 @@ namespace SleepTimer
         readonly Timer wheelFrame;
         long pendingWheel;
         bool hot;
+        double timeTarget = 1800;
 
         public TimerState State;
         public bool Urgent, Interactive = true;
@@ -478,13 +479,14 @@ namespace SleepTimer
             // its direction when crossing twelve o'clock instead of reversing around the dial.
             double position = Math.Max(0, Math.Min(Countdown.MaxSet, seconds));
             if (motion) sweep.To(position);
-            else sweep.Set(position);
+            else if (!sweep.Running || position != timeTarget) sweep.Set(position);
+            timeTarget = position;
         }
 
         public Ring()
         {
-            sweep = Own(new Tween(160, 1800, Invalidate, linear: true));
-            hours = Own(new Tween(Motion.Progress, 0, Invalidate, linear: true));
+            sweep = Own(new Tween(320, 1800, Invalidate));
+            hours = Own(new Tween(320, 0, Invalidate));
             wheelFrame = Own(new Timer { Interval = 16 });
             wheelFrame.Tick += (s, e) => FlushWheel();
         }
