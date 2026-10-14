@@ -39,7 +39,7 @@ namespace SleepTimer
         readonly ToggleButton forceSwitch = new ToggleButton { IsChecked = Settings.Get("force", true) };
         readonly TextBox accentField = new TextBox { MaxLength = 7, Width = 90 };
         readonly TextBlock accentNote = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
-        readonly TextBox quickMinutes = new TextBox { MaxLength = 4, Width = 184, ToolTip = "Whole minutes from 1 to 1440" };
+        readonly TextBox quickMinutes = new TextBox { MaxLength = 4, Width = 184, Tag = "Minutes", ToolTip = "Whole minutes from 1 to 1440" };
         readonly TextBlock quickNote = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
         readonly Button customChip = new Button { Width = 288 };
         readonly PopupMenu trayMenu = new PopupMenu(), awakeMenu = new PopupMenu(160), customMenu = new PopupMenu(288);

@@ -108,9 +108,13 @@ namespace SleepTimer
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='TextBox'>
    <Border x:Name='box' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}'
     BorderThickness='1' CornerRadius='8'>
-    <ScrollViewer x:Name='PART_ContentHost' Focusable='False' Margin='0' VerticalAlignment='{TemplateBinding VerticalContentAlignment}'/>
+    <Grid>
+     <ScrollViewer x:Name='PART_ContentHost' Focusable='False' Margin='0' VerticalAlignment='{TemplateBinding VerticalContentAlignment}'/>
+     <TextBlock x:Name='hint' Text='{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}' Margin='{TemplateBinding Padding}' VerticalAlignment='Center' Foreground='{DynamicResource FaintBrush}' IsHitTestVisible='False' Visibility='Collapsed'/>
+    </Grid>
    </Border>
    <ControlTemplate.Triggers>
+    <Trigger Property='Text' Value=''><Setter TargetName='hint' Property='Visibility' Value='Visible'/></Trigger>
     <Trigger Property='IsKeyboardFocused' Value='True'><Setter TargetName='box' Property='BorderBrush' Value='{DynamicResource AccentBrush}'/></Trigger>
     <Trigger Property='IsEnabled' Value='False'><Setter TargetName='box' Property='Opacity' Value='.4'/></Trigger>
    </ControlTemplate.Triggers>
