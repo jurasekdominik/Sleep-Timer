@@ -12,6 +12,15 @@ namespace SleepTimer
     {
         const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
         [DllImport("user32.dll")] static extern int GetGuiResources(IntPtr process, int flags);
+        [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+        [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint thread, ref GuiThreadInfo info);
+        [StructLayout(LayoutKind.Sequential)]
+        struct GuiThreadInfo
+        {
+            public int Size, Flags;
+            public IntPtr Active, Focus, Capture, MenuOwner, MoveSize, Caret;
+            public Rectangle CaretRect;
+        }
         static T Field<T>(object owner, string name) => (T)owner.GetType().GetField(name, Private).GetValue(owner);
         static void Set(object owner, string name, object value) => owner.GetType().GetField(name, Private).SetValue(owner, value);
         static void Call(object owner, string name, params object[] args) => owner.GetType().GetMethod(name, Private).Invoke(owner, args);
@@ -49,6 +58,16 @@ namespace SleepTimer
                     Check(Field<ActionPicker>(form, "picker").Current == "restart", "Window picker did not synchronize");
                     timer.Reset(); Call(form, "UpdateView", false);
                     var wheel = typeof(Ring).GetMethod("OnMouseWheel", Private);
+                    timer.SetDuration(1800);
+                    // Bare Alt release must not enter the native menu loop or require pointer re-entry.
+                    SendMessage(form.Handle, 0x0112, (IntPtr)0xF100, IntPtr.Zero);
+                    var gui = new GuiThreadInfo { Size = Marshal.SizeOf(typeof(GuiThreadInfo)) };
+                    Check(GetGUIThreadInfo(0, ref gui), "Could not inspect GUI thread after Alt release");
+                    Check((gui.Flags & 4) == 0, "Alt release activated native menu mode");
+                    var at = ring.PointToScreen(new Point(ring.Width / 2, Theme.D(50)));
+                    SendMessage(ring.Handle, 0x020A, (IntPtr)(120 << 16), (IntPtr)((at.Y << 16) | (at.X & 0xFFFF)));
+                    ring.FlushWheel();
+                    Check(timer.Duration == 2100, "Wheel stopped responding after Alt release");
                     timer.SetDuration(1800);
                     for (int i = 0; i < 5000; i++) wheel.Invoke(ring, new object[] {new MouseEventArgs(MouseButtons.None, 0, 0, 0, 12)});
                     ring.FlushWheel();

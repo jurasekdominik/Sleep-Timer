@@ -807,8 +807,12 @@ namespace SleepTimer
 
         protected override void WndProc(ref Message m)
         {
-            const int SysCommand = 0x0112, Minimize = 0xF020;
+            const int SysCommand = 0x0112, Minimize = 0xF020, KeyMenu = 0xF100;
             if (m.Msg == SysCommand && ((int)m.WParam & 0xFFF0) == Minimize) { Hide(); return; }
+            // Alt is a fine-scroll modifier; releasing it must not activate the native menu.
+            // A character in lParam (for example Alt+Space) still follows normal system-menu handling.
+            if (m.Msg == SysCommand && ((int)m.WParam & 0xFFF0) == KeyMenu && m.LParam == IntPtr.Zero)
+            { m.Result = IntPtr.Zero; return; }
             base.WndProc(ref m);
         }
 
