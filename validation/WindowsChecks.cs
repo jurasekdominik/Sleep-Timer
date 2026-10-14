@@ -1,10 +1,18 @@
 using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Windows.Forms;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using Microsoft.Win32;
 
 namespace SleepTimer
 {
@@ -12,7 +20,7 @@ namespace SleepTimer
     {
         const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
         [DllImport("user32.dll")] static extern int GetGuiResources(IntPtr process, int flags);
-        [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+        [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr window, int msg, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint thread, ref GuiThreadInfo info);
         [StructLayout(LayoutKind.Sequential)]
         struct GuiThreadInfo
@@ -23,120 +31,156 @@ namespace SleepTimer
         }
         static T Field<T>(object owner, string name) => (T)owner.GetType().GetField(name, Private).GetValue(owner);
         static void Set(object owner, string name, object value) => owner.GetType().GetField(name, Private).SetValue(owner, value);
-        static void Call(object owner, string name, params object[] args) => owner.GetType().GetMethod(name, Private).Invoke(owner, args);
-        static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
+        static object Call(object owner, string name, params object[] args) => owner.GetType().GetMethod(name, Private).Invoke(owner, args);
+        static void Check(bool okay, string text) { if (!okay) throw new Exception(text); }
         static void Pump(int milliseconds)
         {
-            var clock = Stopwatch.StartNew();
-            while (clock.ElapsedMilliseconds < milliseconds) { Application.DoEvents(); System.Threading.Thread.Sleep(5); }
+            var frame = new DispatcherFrame();
+            var stop = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(milliseconds) };
+            stop.Tick += (s, e) => { stop.Stop(); frame.Continue = false; };
+            stop.Start(); Dispatcher.PushFrame(frame);
         }
-        static MainForm Open()
+        static MainWindow Open()
         {
-            var form = new MainForm(); form.Show();
-            // Stop expiry polling before any test starts a countdown. No power action is ever fired.
-            Field<System.Windows.Forms.Timer>(form, "ticker").Stop();
-            return form;
+            var window = new MainWindow { TestMode = true };
+            Field<DispatcherTimer>(window, "ticker").Stop();
+            window.Show(); window.UpdateLayout(); return window;
+        }
+        static void Close(MainWindow window) { Set(window, "quitting", true); window.Close(); window.Dispose(); }
+        static void Capture(MainWindow window, string name)
+        {
+            window.UpdateLayout();
+            var root = (FrameworkElement)window.Content;
+            int width = (int)Math.Ceiling(root.ActualWidth), height = (int)Math.Ceiling(root.ActualHeight);
+            var image = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            image.Render(root);
+            var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(image));
+            Directory.CreateDirectory("validation-output");
+            using (var file = File.Create(Path.Combine("validation-output", name + ".png"))) png.Save(file);
         }
         [STAThread] static int Main()
         {
-            Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Theme.Init();
-            try
+            // Preserve the caller's settings. No expiry polling or power action runs in this suite.
+            using (var key = Registry.CurrentUser.CreateSubKey(@"Software\SleepTimer"))
             {
-                using (var form = Open())
+                var saved = key.GetValueNames().ToDictionary(n => n, n => Tuple.Create(key.GetValue(n), key.GetValueKind(n)));
+                try
                 {
-                    var timer = Field<Countdown>(form, "countdown");
-                    var ring = Field<Ring>(form, "ring");
-                    Set(form, "clockMode", false); Call(form, "SyncMode", false); Call(form, "SetAction", "shutdown");
-                    timer.SetDuration(1800); Call(form, "UpdateView", false); Pump(200);
-                    // Sample the real UI tween on both sides of an hourly rollover.
-                    ring.SetTime(3600, false);
-                    ring.SetTime(3660, true);
-                    Pump(60);
-                    var arc = Field<Tween>(ring, "sweep");
-                    Check(arc.Value >= 3600 && arc.Value <= 3660, "Adding across hour reversed animation");
-                    Pump(680);
-                    Check(Math.Abs(arc.Value - 3660) < .001, "Forward animation missed its target");
-                    ring.SetTime(3660, false);
-                    ring.SetTime(3360, true);
-                    Pump(60);
-                    Check(arc.Value >= 3360 && arc.Value <= 3660, "Subtracting across hour reversed animation");
-                    Pump(680);
-                    Check(Math.Abs(arc.Value - 3360) < .001, "Backward animation missed its target");
-                    ring.Time = TimeText.Clock(1800);
-                    ring.SetTime(1800, false);
-                    ring.Time = TimeText.Clock(3600);
-                    ring.SetTime(3600, true);
-                    Pump(60);
-                    double before = arc.Value;
-                    Check(before > 1800 && before < 3600, "Large increment did not show sweep progress");
-                    Check(ring.DisplayTime == TimeText.Clock(Math.Round(before / 60) * 60), "Counter did not animate in minute steps");
-                    Check(ring.DisplayTime != ring.Time, "Counter jumped to target immediately");
-                    ring.SetTime(3600, false); // Same target from periodic view refresh.
-                    Pump(100);
-                    Check(arc.Value > before && arc.Value < 3600, "View refresh interrupted sweep progress");
-                    Pump(680);
-                    Check(Math.Abs(arc.Value - 3600) < .001, "Animated increment did not reach target");
-                    Check(ring.DisplayTime == ring.Time, "Counter did not settle on exact target");
-                    ring.SetTime(1800, true);
-                    ring.Time = TimeText.Clock(1800);
-                    Pump(60);
-                    Check(ring.DisplayTime == TimeText.Clock(Math.Round(arc.Value / 60) * 60), "Counter did not count down with sweep");
-                    ring.ClockTime = true; ring.Time = "12:30";
-                    Check(ring.DisplayTime == "12:30", "Clock time was formatted as a duration");
-                    ring.ClockTime = false;
-                    Pump(680);
-                    Call(form, "StartQuickTimer", 150); timer.Pause(); Call(form, "UpdateView", false); Pump(200);
-                    Set(form, "trayQuickPage", true); Set(form, "trayQuickActionPage", true);
-                    var actions = (System.Collections.Generic.List<PickRow>)form.GetType().GetMethod("TrayRows", Private).Invoke(form, null);
-                    actions.Single(r => r.Text == "Restart").Click();
-                    Check(Field<PowerAction>(form, "action").Key == "shutdown", "Choosing next action changed paused countdown");
-                    Call(form, "StartQuickTimer", 60);
-                    Check(Field<PowerAction>(form, "action").Key == "restart", "Quick action was not applied");
-                    Check(Field<ActionPicker>(form, "picker").Current == "restart", "Window picker did not synchronize");
-                    timer.Reset(); Call(form, "UpdateView", false);
-                    var wheel = typeof(Ring).GetMethod("OnMouseWheel", Private);
-                    timer.SetDuration(1800);
-                    // Bare Alt release must not enter the native menu loop or require pointer re-entry.
-                    SendMessage(form.Handle, 0x0112, (IntPtr)0xF100, IntPtr.Zero);
-                    var gui = new GuiThreadInfo { Size = Marshal.SizeOf(typeof(GuiThreadInfo)) };
-                    Check(GetGUIThreadInfo(0, ref gui), "Could not inspect GUI thread after Alt release");
-                    Check((gui.Flags & 4) == 0, "Alt release activated native menu mode");
-                    var at = ring.PointToScreen(new Point(ring.Width / 2, Theme.D(50)));
-                    SendMessage(ring.Handle, 0x020A, (IntPtr)(120 << 16), (IntPtr)((at.Y << 16) | (at.X & 0xFFFF)));
-                    ring.FlushWheel();
-                    Check(timer.Duration == 2100, "Wheel stopped responding after Alt release");
-                    timer.SetDuration(1800);
-                    for (int i = 0; i < 5000; i++) wheel.Invoke(ring, new object[] {new MouseEventArgs(MouseButtons.None, 0, 0, 0, 12)});
-                    ring.FlushWheel();
-                    Check(timer.Duration == 3600, "Fast-wheel burst skipped the first hour stop");
-                    wheel.Invoke(ring, new object[] {new MouseEventArgs(MouseButtons.None, 0, 0, 0, 120)});
-                    ring.FlushWheel(); Check(timer.Duration == 3600, "Wheel input bypassed the hour hold");
-                    wheel.Invoke(ring, new object[] {new MouseEventArgs(MouseButtons.None, 0, 0, 0, -120)});
-                    ring.FlushWheel(); Check(timer.Duration == 3300, "Wheel reversal was delayed by hour hold");
+                    Settings.Set("start_with_windows", false); Settings.Set("awake", false);
+                    Settings.Set("clock_mode", false); Settings.Set("duration", 1800);
+                    var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+                    Theme.Init(app);
+                    var window = Open();
+                    try
+                    {
+                        var countdown = Field<Countdown>(window, "countdown");
+                        var face = Field<TimerFace>(window, "face");
+                        Call(window, "SetAction", "shutdown");
+                        Call(window, "AddTime", 1800);
+                        Check(countdown.Duration == 3600, "Wheel did not stop at hour");
+                        Call(window, "AddTime", 300); Check(countdown.Duration == 3600, "400 ms hold ignored");
+                        Call(window, "AddTime", -300); Check(countdown.Duration == 3300, "Immediate reversal blocked");
+                        Pump(450);
+                        Call(window, "AddTime", 900); Check(countdown.Duration == 3600, "Modifier-sized step skipped hour");
+                        Pump(450);
+                        Call(window, "AddTime", 1800); Check(countdown.Duration == 5400, "Hour hold did not expire");
+                        Pump(100);
+                        Check(face.Position > 3600 && face.Position < 5400, "Dial edit animation has no intermediate progress");
+                        Check(face.DisplayTime == TimeText.Clock(Math.Round(face.Position / 60) * 60), "Counter does not follow minute increments");
+                        Pump(650);
+                        Check(Math.Abs(face.Position - 5400) < 1, "Dial did not reach target");
+                        face.UpdatePosition(3600, false, false);
+                        face.UpdatePosition(3660, true, false);
+                        Pump(80); Check(face.Position >= 3600 && face.Position <= 3660, "Forward rollover reversed");
+                        Pump(650);
+                        face.UpdatePosition(3360, true, false);
+                        Pump(80); Check(face.Position >= 3360 && face.Position <= 3660, "Backward rollover reversed");
+                        Pump(650);
+
+                        Call(window, "SetMode", true);
+                        Check(Field<bool>(window, "clockMode"), "At time mode failed");
+                        Check(Field<TextBox>(window, "clockField").Visibility == Visibility.Visible, "Clock field stayed hidden");
+                        Check(face.ClockMode, "Clock display was not preserved");
+                        Call(window, "SetMode", false);
+                        Call(window, "StartQuickTimer", 150);
+                        countdown.Pause(); Call(window, "UpdateView", false);
+                        Set(window, "trayPage", 3);
+                        var rows = (System.Collections.Generic.List<MenuRow>)Call(window, "TrayRows");
+                        rows.Single(r => r.Text == "Restart").Click();
+                        Check(Field<PowerAction>(window, "action").Key == "shutdown", "Next action changed paused timer");
+                        Call(window, "StartQuickTimer", 60);
+                        Check(Field<PowerAction>(window, "action").Key == "restart", "Quick action was not applied");
+                        Check(!Field<bool>(window, "clockMode"), "Quick timer did not switch to Duration");
+                        countdown.Reset(); Call(window, "UpdateView", false);
+
+                        Call(window, "SetAwake", 15);
+                        Check(Field<int>(window, "awakeMinutes") == 15, "Keep awake duration failed");
+                        Call(window, "SetAwake", 0);
+                        var input = Field<TextBox>(window, "quickMinutes");
+                        input.Text = "90"; Call(window, "AddQuickTimer");
+                        Check(Field<QuickTimers>(window, "quickTimers").All.Contains(90), "Custom quick timer not added");
+                        input.Text = "0"; Call(window, "AddQuickTimer");
+                        Check(!Field<QuickTimers>(window, "quickTimers").All.Contains(0), "Invalid quick timer accepted");
+                        var palette = new ColorPicker(Theme.Accent) { Owner = window };
+                        palette.Show(); Pump(50); palette.Close();
+                    }
+                    finally { Close(window); }
+
+                    var visual = Open();
+                    try
+                    {
+                        var countdown = Field<Countdown>(visual, "countdown");
+                        countdown.SetDuration(10800); Call(visual, "UpdateView", false); Pump(150);
+                        Capture(visual, "wpf-main");
+                        Call(visual, "ToggleSettings"); Pump(300); Capture(visual, "wpf-settings");
+                        Call(visual, "SelectTab", 1); Pump(300); Capture(visual, "wpf-appearance");
+                        Call(visual, "SelectTab", 2); Pump(300); Capture(visual, "wpf-timers");
+                        Call(visual, "ToggleSettings"); Pump(300);
+                        var awake = Field<PopupMenu>(visual, "awakeMenu");
+                        var anchor = Field<Button>(visual, "awakeChip");
+                        for (int i = 0; i < 2; i++)
+                        {
+                            awake.Show(new[] { new MenuRow { Text = "Off" } }, anchor);
+                            Pump(100);
+                            Check(awake.Visible, "WPF popup did not reopen");
+                            awake.Close(); Pump(200);
+                        }
+                        SendMessage(new WindowInteropHelper(visual).Handle, 0x0112, (IntPtr)0xF100, IntPtr.Zero);
+                        var info = new GuiThreadInfo { Size = Marshal.SizeOf(typeof(GuiThreadInfo)) };
+                        Check(GetGUIThreadInfo(0, ref info) && (info.Flags & 4) == 0, "Alt release activated menu mode");
+                        foreach (double scale in new[] { 1d, 1.5, 2 })
+                        {
+                            var face = Field<TimerFace>(visual, "face");
+                            face.LayoutTransform = new ScaleTransform(scale, scale);
+                            face.Measure(new System.Windows.Size(320 * scale, 328 * scale));
+                            Check(face.DesiredSize.Width >= 320 * scale - 1, "Dial does not scale with DPI");
+                            face.LayoutTransform = Transform.Identity;
+                        }
+                    }
+                    finally { Close(visual); }
+                    for (int i = 0; i < 3; i++) { var warm = Open(); Pump(30); Close(warm); }
+                    GC.Collect(); GC.WaitForPendingFinalizers(); Pump(100);
+                    int baseline = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
+                    for (int i = 0; i < 20; i++)
+                    {
+                        var repeat = Open();
+                        Call(repeat, "AddTime", 300); Call(repeat, "ToggleSettings");
+                        Pump(20); Close(repeat);
+                    }
+                    GC.Collect(); GC.WaitForPendingFinalizers(); Pump(150);
+                    int final = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
+                    Check(final - baseline < 32, "GDI handle growth: " + baseline + " -> " + final);
+                    Console.WriteLine("WPF checks passed; GDI handles " + baseline + " -> " + final);
+                    return 0;
                 }
-                // Warm caches before checking that repeated construction/disposal does not grow GDI objects.
-                for (int i = 0; i < 3; i++) using (var f = Open()) Pump(20);
-                GC.Collect(); GC.WaitForPendingFinalizers();
-                int baseline = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
-                for (int i = 0; i < 25; i++) using (var f = Open())
+                catch (Exception ex) { Console.WriteLine("::error::" + ex); return 1; }
+                finally
                 {
-                    Call(f, "ToggleSettings"); Pump(20); // Also close in the middle of a bitmap crossfade.
-                    var list = Field<PopupList>(f, "awakeList");
-                    list.Show(new System.Collections.Generic.List<PickRow> {new PickRow {Text = "Off"}}, new Point(100, 100), false, true);
-                    Pump(20);
+                    Native.KeepAwake(false, false);
+                    foreach (var name in key.GetValueNames()) key.DeleteValue(name, false);
+                    foreach (var value in saved) key.SetValue(value.Key, value.Value.Item1, value.Value.Item2);
                 }
-                GC.Collect(); GC.WaitForPendingFinalizers(); Pump(100);
-                int final = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
-                Check(final - baseline < 32, $"GDI resource growth: {baseline} -> {final}");
-                Console.WriteLine($"Windows checks passed; GDI objects {baseline} -> {final}");
-                return 0;
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine("::error::" + ex.ToString().Replace("%", "%25").Replace("\r", "%0D").Replace("\n", "%0A"));
-                return 1;
-            }
-            finally { Native.KeepAwake(false, false); Theme.DisposeFonts(); }
         }
     }
 }

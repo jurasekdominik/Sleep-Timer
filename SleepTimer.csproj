@@ -1,19 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- .NET Framework 4.8 ships with Windows 10/11: a single small exe, no runtime to install. -->
+  <!-- Framework WPF is part of Windows' .NET Framework: no bundled runtime or UI library. -->
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net48</TargetFramework>
-    <LangVersion>10</LangVersion>
-    <UseWindowsForms>true</UseWindowsForms>
-    <AssemblyName>SleepTimer</AssemblyName>
-    <RootNamespace>SleepTimer</RootNamespace>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>assets\SleepTimer.ico</ApplicationIcon>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <Deterministic>true</Deterministic>
+    <OutputType>WinExe</OutputType><TargetFramework>net48</TargetFramework><LangVersion>10</LangVersion>
+    <UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>SleepTimer</AssemblyName><RootNamespace>SleepTimer</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest><ApplicationIcon>assets\SleepTimer.ico</ApplicationIcon>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo><Deterministic>true</Deterministic>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Remove="test\**;validation\**" />
-    <EmbeddedResource Include="assets\github-mark-white.png" LogicalName="github-mark-white.png" />
+    <Compile Include="src/*.cs" Exclude="src/MainForm.cs" />
+    <Resource Include="assets/SleepTimer.ico" />
+    <Resource Include="assets/github-mark-white.png" />
   </ItemGroup>
 </Project>

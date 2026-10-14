@@ -1,44 +1,24 @@
-# Sleep Timer
+# Sleep Timer — WPF branch
 
-Shut down, sleep or restart your PC when a timer ends, or keep it awake.
+A small Windows timer for shutdown, sleep and restart. This branch replaces the WinForms interface with WPF while preserving the existing countdown and registry settings.
 
-<p align="center"><img src="assets/screenshot.png" alt="Sleep Timer" width="376"></p>
-
-## Download
-
-Get portable `SleepTimer.exe` from [Releases](https://github.com/jurasekdominik/Sleep-Timer/releases).
-
-**Requirements:** Windows 10/11 and .NET Framework 4.8.
-
-## Features
-
-- Shut down, sleep or restart after a countdown or at a set time.
-- Pause, resume and adjust the timer while it runs.
-- Quick timers from the tray, with your own presets.
-- Keep the PC awake, optionally with the screen on.
-- Custom accent colour and optional startup with Windows.
+Requires Windows 10/11 with .NET Framework 4.8 (included on current Windows versions). There is no bundled .NET runtime, third-party UI toolkit or font. The Windows validation workflow measures the executable and verifies that a copy of **SleepTimer.exe alone** starts successfully.
 
 ## Use
 
-Choose an action, set a duration or a clock time, and click the circle to start. You can pause or change the time while it runs. The ring shows minutes; the smaller segments show additional hours.
+- Left-click the dial to start, pause or resume; right-click to cancel.
+- Scroll: 5 minutes. Alt: 1 minute. Shift: 15 minutes. Ctrl: 30 minutes. Ctrl+Shift: 60 minutes.
+- Wheel edits stop at whole hours for 400 ms. Reversing direction bypasses the hold.
+- Dial edits animate for 600 ms; the counter follows in minute steps. Hour rollovers retain the scroll direction.
+- Duration and At time modes, keep awake, keep screen on, quick presets, custom presets, startup, force close and accent settings remain available.
+- Close or minimize to hide in the tray. Double-click the tray icon to reopen.
+- Tray quick-action changes apply to the next quick timer without changing an active countdown.
 
-<table align="center">
-  <tr><th>Control</th><th>Action</th></tr>
-  <tr><td>Left-click</td><td>Start, pause or resume</td></tr>
-  <tr><td>Right-click</td><td>Cancel</td></tr>
-  <tr><td>Scroll</td><td>±5 minutes</td></tr>
-  <tr><td>Alt / Shift / Ctrl + scroll</td><td>±1 / ±15 / ±30 minutes</td></tr>
-  <tr><td>Ctrl + Shift + scroll</td><td>±60 minutes</td></tr>
-</table>
+## Build and validation
 
-Keep awake prevents automatic sleep, with an option to keep the screen on. Right-click the tray icon for quick timers and keep-awake options. Add your own timer presets in Settings.
+Install .NET SDK 8 on Windows and run `build.cmd`.
+Run `bash scripts/check-timers.sh` for portable logic checks and `powershell -File scripts/check-windows.ps1` for WPF UI checks.
 
-Closing the window hides it to the tray. Double-click the tray icon to reopen it, or choose Quit from its menu.
+The WPF branch's Validate workflow publishes **SleepTimer-WPF** with the standalone executable, executable size and rendered UI previews. It does not replace the stable release or merge into main.
 
-## Build
-
-Install .NET SDK 8 and run `build.cmd`. It creates `SleepTimer.exe` in the project folder.
-
-## License
-
-[MIT](LICENSE) · Dominik Jurásek
+WPF animation clocks drive the vector dial, controls and transitions without a fixed 60 Hz UI timer. Actual refresh behavior depends on Windows' compositor, GPU, display setup and workload; automated UI checks cannot certify the feel of a physical 144 Hz monitor.

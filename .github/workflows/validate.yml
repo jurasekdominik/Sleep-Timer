@@ -1,7 +1,7 @@
 name: Validate
 on:
   push:
-    branches: [main]
+    branches: [main, WPF]
     tags: [v1.0]
     paths-ignore: ['assets/screenshot*.png', 'README.md']
   pull_request:
@@ -20,7 +20,9 @@ jobs:
         with:
           dotnet-version: '8.0.x'
       - run: bash scripts/check-timers.sh
-      - run: dotnet build SleepTimer.csproj -c Release --nologo -warnaserror
+      # WPF needs Windows desktop build targets; portable logic still runs on Linux.
+      - if: github.ref != 'refs/heads/WPF'
+        run: dotnet build SleepTimer.csproj -c Release --nologo -warnaserror
   windows:
     runs-on: windows-latest
     permissions:
@@ -33,10 +35,27 @@ jobs:
       - run: dotnet build SleepTimer.csproj -c Release --nologo -warnaserror
       - shell: pwsh
         run: ./scripts/check-windows.ps1
+      - name: Measure executable and verify standalone startup
+        shell: pwsh
+        run: |
+          $exe = Get-Item bin/Release/net48/SleepTimer.exe
+          $size = "SleepTimer.exe: $($exe.Length) bytes ($([math]::Round($exe.Length / 1024, 1)) KiB)"
+          Write-Output $size
+          New-Item validation-output -ItemType Directory -Force | Out-Null
+          $size | Set-Content validation-output/size.txt
+          $size | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          $standalone = Join-Path $env:RUNNER_TEMP 'sleep-timer-standalone'
+          New-Item $standalone -ItemType Directory -Force | Out-Null
+          Copy-Item $exe.FullName (Join-Path $standalone 'SleepTimer.exe')
+          $process = Start-Process (Join-Path $standalone 'SleepTimer.exe') -ArgumentList '--verify-startup' -PassThru
+          if (-not $process.WaitForExit(15000)) { $process.Kill(); throw 'Standalone executable did not complete startup check' }
+          if ($process.ExitCode -ne 0) { throw "Standalone startup failed: $($process.ExitCode)" }
       - uses: actions/upload-artifact@v4
         with:
-          name: SleepTimer-1.0
-          path: bin/Release/net48/SleepTimer.exe
+          name: SleepTimer-WPF
+          path: |
+            bin/Release/net48/SleepTimer.exe
+            validation-output/
       - name: Update 1.0 release
         if: github.event_name == 'push' && github.ref == 'refs/tags/v1.0'
         env:

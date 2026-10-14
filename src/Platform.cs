@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
-using System.Windows.Forms;
 using Microsoft.Win32;
 
 namespace SleepTimer
@@ -105,7 +104,7 @@ namespace SleepTimer
             {
                 using (var k = Registry.CurrentUser.CreateSubKey(RunKey))
                 {
-                    if (enabled) k.SetValue(Name, $"\"{Application.ExecutablePath}\" {Program.TrayArg}");
+                    if (enabled) k.SetValue(Name, $"\"{System.Reflection.Assembly.GetExecutingAssembly().Location}\" {Program.TrayArg}");
                     else k.DeleteValue(Name, false);
                 }
             }

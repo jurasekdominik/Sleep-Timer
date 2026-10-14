@@ -1,12 +1,18 @@
-# Development
+# WPF development
 
-Install .NET SDK 8. On Windows, run `build.cmd` to create `SleepTimer.exe`.
+Target: .NET Framework 4.8, WPF, one small framework-dependent executable.
+Build with .NET SDK 8 on Windows. The framework's WinForms NotifyIcon is retained only for native tray integration; all windows, settings and popup menus use WPF.
 
-## Checks
+Shared timer logic stays in Countdown.cs, TimerDial.cs, QuickTimers.cs and WheelInput.cs. Native power calls, registry persistence and single-instance activation stay in Platform.cs.
+MainWindow.cs coordinates behavior. Ui.cs implements WPF styles, vector dial and popup menus. ColorPicker.cs contains the contrast-aware palette and HSV mixer.
 
-- Logic checks: `bash scripts/check-timers.sh`.
-- Windows UI and resource checks: `powershell -File scripts/check-windows.ps1`.
+Animations use WPF DoubleAnimation and dependency properties. Do not introduce a 16 ms DispatcherTimer to drive animation frames, or set a 60 Hz DesiredFrameRate. The 100 ms timer only polls state, saves settings and checks expiry; it does not pace rendering. Whole-hour rollover animates unwrapped seconds and wraps only while drawing.
 
-Windows checks exercise quick-timer actions, fast wheel input, disposal during animations, and GDI resource growth. Expiry polling is stopped before test countdowns; no power action is executed. Use a disposable test machine because the checks write app settings.
+Checks:
+- bash scripts/check-timers.sh
+- powershell -File scripts/check-windows.ps1 (Windows)
+- CI verifies a standalone copy of SleepTimer.exe with --verify-startup and reports its exact size.
 
-CI builds with warnings treated as errors and runs both suites. Pushing the `v1.0` tag also replaces the release executable after the Windows checks pass. Screenshots are maintained manually.
+WPF checks preserve registry settings and stop expiry polling before test countdowns; TestMode also prevents power actions. They exercise wheel stops, minute counter and dial animations, mode switches, quick-action isolation, keep-awake choices, custom presets, popup reopening, Alt release and resource disposal. Rendered main/settings/appearance/timers previews are attached to CI artifacts.
+
+Review manually at 100%, 150% and 200% DPI and on a high-refresh display. Compare smoothness, fonts, tray positioning and input on the real device before replacing the stable release.
