@@ -24,7 +24,7 @@ namespace SleepTimer
         readonly HourStop hourStop = new HourStop();
         readonly QuickTimers quickTimers = new QuickTimers(Settings.Get("quick_timers", ""));
         readonly Forms.NotifyIcon tray = new Forms.NotifyIcon();
-        readonly DispatcherTimer ticker = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(100) };
+        readonly DispatcherTimer ticker = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(100) };
         DispatcherTimer aborted;
         readonly TimerFace face = new TimerFace();
         readonly Canvas main = new Canvas { Background = Brushes.Transparent };

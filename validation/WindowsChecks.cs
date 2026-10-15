@@ -36,7 +36,7 @@ namespace SleepTimer
         static void Pump(int milliseconds)
         {
             var frame = new DispatcherFrame();
-            var stop = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(milliseconds) };
+            var stop = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(milliseconds) };
             stop.Tick += (s, e) => { stop.Stop(); frame.Continue = false; };
             stop.Start(); Dispatcher.PushFrame(frame);
         }
