@@ -7,5 +7,6 @@
  <ItemGroup>
   <Compile Include="../src/*.cs" Exclude="../src/MainForm.cs"/><Compile Include="WindowsChecks.cs"/>
   <Resource Include="../assets/SleepTimer.ico" Link="assets/SleepTimer.ico"/>
+  <Resource Include="../assets/github-mark-white.png" Link="assets/github-mark-white.png"/>
  </ItemGroup>
 </Project>

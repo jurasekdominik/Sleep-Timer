@@ -1,11 +1,11 @@
-# Sleep Timer desktop design
+# WPF design
 
-The WPF interface uses shared role colours and geometry in DesignTokens.cs and shared templates in Ui.cs. The accent remains the user's choice, default mint. Neutral roles, 28 px controls, 4 px control/menu corners, compact typography, 32 × 18 switches, sidebar navigation and a 28 px status bar follow the supplied portable desktop guidance. Segoe UI replaces the reference's Inter; no font files or UI packages are bundled.
+The interface retains the existing dark watchface layout, accent palette, flat-ended 60-minute arc, outside minute ticks and 24 inner hour blocks. Numeric time shows total remaining time; there is no dial caption.
 
-Settings are live pages composed of unboxed section groups in a real ScrollViewer. Animation durations share an equal-column grid with units in the labels; text values are right-aligned. Fields save on Enter or focus loss and show invalid-input messages. The keyboard reference is the one reference card.
+WPF vector geometry is drawn in device-independent units and follows per-monitor DPI. An unwrapped total-second dependency property drives the dial. Adding crosses twelve o'clock clockwise; subtracting crosses counterclockwise. Minute increments and hour blocks share a 600 ms cubic-eased edit animation. Normal running progress uses short linear WPF animations. The 100 ms state timer does not determine animation frame rate.
 
-The timer remains a circular 60-minute watchface with 24 inner hour blocks. The counter and circle retain independent WPF animation clocks and configurable durations. Transparent dial geometry and main-page wheel preview handling make empty interior areas and the action dropdown respond consistently without extending wheel edits outside the circle.
+The entire first hour contributes to the hour blocks: 24 hours fills all 24 segments. Wheel input preserves high-resolution deltas and modifier semantics. Whole-hour stops last 400 ms, discard overshoot and permit immediate reversal.
 
-Action, keep-awake and custom-timer choices share the field/dropdown implementation. Lists continue the field frame, mark the selected item and support keyboard navigation. Tray menus use the same rows as a separate card. The former logo/author footer and global gear are replaced by navigation and a plain status bar; the GitHub link is in the tray menu.
+Buttons, switches, mode selection, tab selection, popup appearance and main/settings transitions use WPF animation clocks. Popups use rounded borders and native WPF placement with keyboard focus and dismissal. Colour selection supports eight quick swatches, the full 17-hue / 5-shade palette, custom hex input and HSV mixing with a 4.5:1 contrast guide.
 
-The window title always shows the current time and a status separated by ·. Ready, Scheduled, Running, Paused and executing power-action states are named in words. Power states retain fixed warning/danger colours. A sample gallery plus rendered main, clock, general, appearance, timer and popup pages are produced by Windows validation.
+Countdown, power actions, warning balloons, abort recovery, keep-awake state, quick-timer semantics and settings keys match the WinForms app. Close/minimize hide to the tray; explicit Quit confirms active countdown cancellation. Native tray icons represent overall progress and are released with their HICON handles.

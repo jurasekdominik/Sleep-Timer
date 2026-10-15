@@ -35,24 +35,18 @@ namespace SleepTimer
         static void Check(bool okay, string text) { if (!okay) throw new Exception(text); }
         static void Pump(int milliseconds)
         {
-            // Start newly queued WPF animation clocks before measuring elapsed progress.
-            Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.Render, new Action(() => { }));
             var frame = new DispatcherFrame();
-            var stop = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(milliseconds) };
+            var stop = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(milliseconds) };
             stop.Tick += (s, e) => { stop.Stop(); frame.Continue = false; };
             stop.Start(); Dispatcher.PushFrame(frame);
-            Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.Render, new Action(() => { }));
         }
         static MainWindow Open()
         {
-            var window = new MainWindow(testMode: true);
+            var window = new MainWindow { TestMode = true };
             Field<DispatcherTimer>(window, "ticker").Stop();
-            Console.WriteLine("CHECKPOINT: show window");
-            window.Show();
-            Console.WriteLine("CHECKPOINT: update window layout");
-            window.UpdateLayout(); return window;
+            window.Show(); window.UpdateLayout(); return window;
         }
-        static void Close(MainWindow window) { Console.WriteLine("CHECKPOINT: close window"); Set(window, "quitting", true); window.Close(); window.Dispose(); Console.WriteLine("CHECKPOINT: window closed"); }
+        static void Close(MainWindow window) { Set(window, "quitting", true); window.Close(); window.Dispose(); }
         static void Capture(MainWindow window, string name)
         {
             window.UpdateLayout();
@@ -70,75 +64,6 @@ namespace SleepTimer
             using (var file = File.Create(path)) png.Save(file);
             Console.WriteLine("PREVIEW:" + name + ":" + Convert.ToBase64String(File.ReadAllBytes(path)));
         }
-
-        static void WheelAt(MainWindow window, TimerFace face, System.Windows.Point local)
-        {
-            var previous = System.Windows.Forms.Cursor.Position;
-            try
-            {
-                var at = face.PointToScreen(local);
-                System.Windows.Forms.Cursor.Position = new System.Drawing.Point((int)at.X, (int)at.Y);
-                window.Activate(); Pump(30);
-                SendMessage(new WindowInteropHelper(window).Handle, 0x020A, (IntPtr)(120 << 16),
-                    (IntPtr)(((int)at.Y << 16) | ((int)at.X & 0xFFFF)));
-                Pump(80);
-            }
-            finally { System.Windows.Forms.Cursor.Position = previous; }
-        }
-
-
-
-        static void CollectResources()
-        {
-            Console.WriteLine("CHECKPOINT: GC collect");
-            GC.Collect();
-            // WPF finalizers may marshal cleanup to the dispatcher; never block that thread waiting for them.
-            var finalizers = System.Threading.Tasks.Task.Run(() => GC.WaitForPendingFinalizers());
-            var timeout = Stopwatch.StartNew();
-            while (!finalizers.IsCompleted)
-            {
-                if (timeout.ElapsedMilliseconds > 10000) throw new Exception("WPF finalizer cleanup exceeded 10 seconds");
-                Pump(10);
-            }
-            finalizers.GetAwaiter().GetResult(); GC.Collect(); Pump(100);
-        }
-
-        static void RenderGallery()
-        {
-            var page = new StackPanel();
-            page.Children.Add(new TextBlock { Text = "Shared controls", FontSize = Design.Title, FontWeight = FontWeights.SemiBold });
-            var buttons = Design.Block("Buttons");
-            var row = new StackPanel { Orientation = Orientation.Horizontal };
-            foreach (var key in new[] { "PrimaryButton", "", "TextButton", "DangerButton" })
-            {
-                var button = new Button { Content = key == "" ? "Secondary" : key.Replace("Button", ""), MinWidth = Design.ButtonMin, Margin = new Thickness(0, 0, Design.Gap, 0) };
-                if (key != "") button.Style = (Style)Application.Current.FindResource(key);
-                row.Children.Add(button);
-            }
-            buttons.Children.Add(row); page.Children.Add(buttons);
-            var form = Design.Block("Fields and switches");
-            var fields = new StackPanel { Orientation = Orientation.Horizontal };
-            fields.Children.Add(new TextBox { Text = "600", Width = Design.InputWidth, Margin = new Thickness(0, 0, Design.FieldPairGap, 0) });
-            fields.Children.Add(new TextBox { Tag = "Placeholder", Width = Design.MainActionWidth, Margin = new Thickness(0, 0, Design.FieldPairGap, 0) });
-            fields.Children.Add(new TextBox { Text = "Disabled", IsEnabled = false, Width = Design.InputWidth }); form.Children.Add(fields);
-            var toggles = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, Design.BlockPadding, 0, 0) };
-            toggles.Children.Add(new ToggleButton { Margin = new Thickness(0, 0, Design.FieldPairGap, 0) });
-            toggles.Children.Add(new ToggleButton { IsChecked = true, Margin = new Thickness(0, 0, Design.FieldPairGap, 0) });
-            toggles.Children.Add(new ToggleButton { IsEnabled = false }); form.Children.Add(toggles); page.Children.Add(form);
-            var menu = Design.Block("Dropdown and menu rows");
-            var dropdown = new Button { Content = "Shut down", Width = Design.MainActionWidth, HorizontalAlignment = HorizontalAlignment.Left, Style = (Style)Application.Current.FindResource("DropdownButton") };
-            menu.Children.Add(dropdown);
-            foreach (var text in new[] { "Current item", "Another item", "Disabled item" })
-                menu.Children.Add(new Button { Content = text, IsEnabled = text != "Disabled item", HorizontalContentAlignment = HorizontalAlignment.Left, Style = (Style)Application.Current.FindResource("MenuButton") });
-            page.Children.Add(menu);
-            var tabs = new ModeSelector("Overview", "Details"); page.Children.Add(tabs);
-            var galleryFrame = new Border { Child = page, Padding = new Thickness(Design.PageEdge), Background = Theme.Brush(Theme.Bg) };
-            var window = new Window { Content = galleryFrame, Width = 580, SizeToContent = SizeToContent.Height, Background = Theme.Brush(Theme.Bg), Foreground = Theme.Brush(Theme.Text), ShowInTaskbar = false };
-            TextOptions.SetTextFormattingMode(page, TextFormattingMode.Display);
-            TextOptions.SetTextRenderingMode(page, TextRenderingMode.ClearType);
-            window.Show(); Pump(250); CaptureControl(galleryFrame, "wpf-gallery"); window.Close();
-        }
-
         [STAThread] static int Main()
         {
             // Preserve the caller's settings. No expiry polling or power action runs in this suite.
@@ -152,26 +77,12 @@ namespace SleepTimer
                     Settings.Set("circle_sweep_ms", 600); Settings.Set("counter_sweep_ms", 600);
                     var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                     Theme.Init(app);
-                    Console.WriteLine("CHECKPOINT: opening main window");
                     var window = Open();
-                    Console.WriteLine("CHECKPOINT: native wheel and behavior");
                     try
                     {
                         var countdown = Field<Countdown>(window, "countdown");
                         var face = Field<TimerFace>(window, "face");
-                        WheelAt(window, face, new System.Windows.Point(90, 180));
-                        Check(countdown.Duration == 2100, "Wheel over blank dial interior did not adjust time");
-                        WheelAt(window, face, new System.Windows.Point(160, 186));
-                        Check(countdown.Duration == 2400, "Wheel over the action selector did not adjust time");
-                        countdown.SetDuration(1800); Call(window, "UpdateView", false);
-                        Console.WriteLine("CHECKPOINT: wheel events complete");
-                        Call(window, "SetAction", "sleep");
-                        var force = Field<ToggleButton>(window, "forceSwitch");
-                        Check(force.IsEnabled, "Force-close setting cannot be switched off while Sleep is selected");
-                        force.IsChecked = false; force.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-                        Check(!Settings.Get("force", true), "Force-close setting did not save Off");
                         Call(window, "SetAction", "shutdown");
-                        Check(window.Title == "30:00 · Ready", "Window title is missing current timer/status");
                         Call(window, "AddTime", 1800);
                         Check(countdown.Duration == 3600, "Wheel did not stop at hour");
                         Call(window, "AddTime", 300); Check(countdown.Duration == 3600, "400 ms hold ignored");
@@ -193,14 +104,12 @@ namespace SleepTimer
                         Pump(80); Check(face.Position >= 3360 && face.Position <= 3660, "Backward rollover reversed");
                         Pump(650);
 
-                        Console.WriteLine("CHECKPOINT: default dial animation complete");
                         var circleInput = Field<TextBox>(window, "circleDuration");
                         var textInput = Field<TextBox>(window, "counterDuration");
                         Check(circleInput.Text == "600" && textInput.Text == "600", "Animation defaults changed");
                         circleInput.Text = "120"; Call(window, "CommitAnimationInput", circleInput, true);
                         textInput.Text = "900"; Call(window, "CommitAnimationInput", textInput, false);
                         Check(Settings.Get("circle_sweep_ms", -1) == 120 && Settings.Get("counter_sweep_ms", -1) == 900, "Independent timings were not saved");
-                        Console.WriteLine("CHECKPOINT: reopen for saved durations");
                         var reopened = Open();
                         try
                         {
@@ -208,7 +117,6 @@ namespace SleepTimer
                             Check(reloaded.CircleMilliseconds == 120 && reloaded.CounterMilliseconds == 900, "Timing overrides did not survive reopen");
                         }
                         finally { Close(reopened); }
-                        Console.WriteLine("CHECKPOINT: reopened window closed");
                         window.Activate();
                         face.Snap(1800); face.Time = TimeText.Clock(3600);
                         face.UpdatePosition(3600, true, false); Pump(250);
@@ -234,7 +142,6 @@ namespace SleepTimer
                         circleInput.Text = "600"; Call(window, "CommitAnimationInput", circleInput, true);
                         textInput.Text = "600"; Call(window, "CommitAnimationInput", textInput, false);
 
-                        Console.WriteLine("CHECKPOINT: timing overrides complete");
                         Call(window, "SetMode", true);
                         Check(Field<bool>(window, "clockMode"), "At time mode failed");
                         Check(Field<TextBox>(window, "clockField").Visibility == Visibility.Visible, "Clock field stayed hidden");
@@ -242,7 +149,6 @@ namespace SleepTimer
                         Call(window, "SetMode", false);
                         Call(window, "StartQuickTimer", 150);
                         countdown.Pause(); Call(window, "UpdateView", false);
-                        Check(window.Title.EndsWith(" · Paused"), "Paused title status is missing");
                         Set(window, "trayPage", 3);
                         var rows = (System.Collections.Generic.List<MenuRow>)Call(window, "TrayRows");
                         rows.Single(r => r.Text == "Restart").Click();
@@ -260,13 +166,11 @@ namespace SleepTimer
                         Check(Field<QuickTimers>(window, "quickTimers").All.Contains(90), "Custom quick timer not added");
                         input.Text = "0"; Call(window, "AddQuickTimer");
                         Check(!Field<QuickTimers>(window, "quickTimers").All.Contains(0), "Invalid quick timer accepted");
-                        Console.WriteLine("CHECKPOINT: quick timers complete");
                         var palette = new ColorPicker(Theme.Accent) { Owner = window };
                         palette.Show(); Pump(50); palette.Close();
                     }
                     finally { Close(window); }
 
-                    Console.WriteLine("CHECKPOINT: page previews");
                     var visual = Open();
                     try
                     {
@@ -274,8 +178,8 @@ namespace SleepTimer
                         countdown.SetDuration(10800); Call(visual, "UpdateView", false); Pump(150);
                         Check(((FrameworkElement)visual.Content).ActualHeight >= 508, "Client area clips the footer");
                         Capture(visual, "wpf-main");
-                        Check(((Grid)visual.Content).ColumnDefinitions[0].Width.Value == Design.Sidebar, "Design-system navigation is missing");
-                        Check(Math.Abs(Field<TranslateTransform>(visual, "modeSlide").X - (Design.DialWidth - Design.ModeWidth) / 2) < 1, "Duration selector is not centered");
+                        Check(Field<Canvas>(visual, "main").Children.OfType<BrandFooter>().Count() == 1, "Original wordmark missing");
+                        Check(Math.Abs(Field<TranslateTransform>(visual, "modeSlide").X - 54.6666667) < 1, "Duration selector is not centered");
                         Call(visual, "SetMode", true); Pump(400);
                         var clockBox = Field<TextBox>(visual, "clockField");
                         var clockHost = (ScrollViewer)clockBox.Template.FindName("PART_ContentHost", clockBox);
@@ -283,31 +187,19 @@ namespace SleepTimer
                         Check(Math.Abs(Field<TranslateTransform>(visual, "modeSlide").X) < 1, "At time selector did not slide left");
                         Capture(visual, "wpf-clock");
                         Call(visual, "SetMode", false); Pump(400);
-                        var actionPopup = Field<PopupMenu>(visual, "actionMenu");
-                        actionPopup.Show(PowerAction.All.Select(p => new MenuRow { Text = p.Label }), Field<Button>(visual, "picker"));
-                        Pump(200); CaptureControl((FrameworkElement)Field<Popup>(actionPopup, "popup").Child, "wpf-action-selector");
-                        actionPopup.Close(); Pump(200);
+                        var selector = Field<ActionSelector>(visual, "picker");
+                        Call(selector, "SetOpen", true); Pump(300); Capture(visual, "wpf-action-selector");
+                        Call(selector, "SetOpen", false); Pump(300);
                         Call(visual, "ToggleSettings"); Pump(300);
                         var toggle = Field<ToggleButton>(visual, "forceSwitch");
                         var thumb = (Border)toggle.Template.FindName("thumb", toggle);
-                        Check(((SolidColorBrush)thumb.Background).Color == Colors.White && thumb.Width == Design.ThumbWidth && thumb.Height == Design.ThumbHeight, "Original switch capsule was changed");
-                        var viewer = Field<Grid>(visual, "settings").Children.OfType<ScrollViewer>().Single();
-                        var settingsBar = (ScrollBar)viewer.Template.FindName("PART_VerticalScrollBar", viewer);
-                        Check(settingsBar.ActualWidth <= Design.Gap + 1, "Scrollbar does not use the shared 8 px width");
-                        viewer.ScrollToVerticalOffset(viewer.ScrollableHeight); Pump(80);
-                        Check(viewer.VerticalOffset >= viewer.ScrollableHeight - 1, "Settings scrollbar did not follow content");
-                        viewer.ScrollToHome(); Pump(80);
+                        Check(((SolidColorBrush)thumb.Background).Color == Colors.White && thumb.Width == 28 && thumb.Height == 20, "Original switch capsule was changed");
                         Capture(visual, "wpf-settings");
                         Call(visual, "SelectTab", 1); Pump(300);
                         var accentBox = Field<TextBox>(visual, "accentField");
                         var accentHost = (ScrollViewer)accentBox.Template.FindName("PART_ContentHost", accentBox);
                         Check(accentHost.ViewportHeight + 1 >= accentHost.ExtentHeight, "Hex field text is vertically clipped");
                         Check(accentHost.ViewportWidth + 1 >= accentHost.ExtentWidth, "Hex field text is horizontally clipped");
-                        var circleBox = Field<TextBox>(visual, "circleDuration");
-                        var counterBox = Field<TextBox>(visual, "counterDuration");
-                        Check(Math.Abs(circleBox.TranslatePoint(new System.Windows.Point(0, 0), visual).Y - counterBox.TranslatePoint(new System.Windows.Point(0, 0), visual).Y) < 1,
-                            "Animation duration fields are not aligned");
-                        Check(circleBox.ActualHeight == Design.Field && counterBox.ActualHeight == Design.Field, "Duration fields do not use shared control height");
                         Capture(visual, "wpf-appearance");
                         Call(visual, "SelectTab", 2); Pump(300); Capture(visual, "wpf-timers");
                         Call(visual, "ToggleSettings"); Pump(300);
@@ -327,7 +219,7 @@ namespace SleepTimer
                         Pump(200); CaptureControl((FrameworkElement)Field<Popup>(awake, "popup").Child, "wpf-awake-menu"); awake.Close(); Pump(200);
                         var trayPopup = Field<PopupMenu>(visual, "trayMenu");
                         Set(visual, "trayPage", 0);
-                        trayPopup.Show((System.Collections.Generic.List<MenuRow>)Call(visual, "TrayRows"));
+                        trayPopup.Show((System.Collections.Generic.List<MenuRow>)Call(visual, "TrayRows"), anchor);
                         Pump(200); CaptureControl((FrameworkElement)Field<Popup>(trayPopup, "popup").Child, "wpf-tray-menu"); trayPopup.Close(); Pump(200);
                         SendMessage(new WindowInteropHelper(visual).Handle, 0x0112, (IntPtr)0xF100, IntPtr.Zero);
                         var info = new GuiThreadInfo { Size = Marshal.SizeOf(typeof(GuiThreadInfo)) };
@@ -342,23 +234,18 @@ namespace SleepTimer
                         }
                     }
                     finally { Close(visual); }
-                    Console.WriteLine("CHECKPOINT: resource disposal");
-                    for (int i = 0; i < 3; i++) { Console.WriteLine("CHECKPOINT: warmup " + i); var warm = Open(); Pump(30); Close(warm); }
-                    Console.WriteLine("CHECKPOINT: baseline collection");
-                    CollectResources();
+                    for (int i = 0; i < 3; i++) { var warm = Open(); Pump(30); Close(warm); }
+                    GC.Collect(); GC.WaitForPendingFinalizers(); Pump(100);
                     int baseline = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
                     for (int i = 0; i < 20; i++)
                     {
-                        Console.WriteLine("CHECKPOINT: disposal iteration " + i);
                         var repeat = Open();
                         Call(repeat, "AddTime", 300); Call(repeat, "ToggleSettings");
                         Pump(20); Close(repeat);
                     }
-                    CollectResources();
+                    GC.Collect(); GC.WaitForPendingFinalizers(); Pump(150);
                     int final = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
                     Check(final - baseline < 32, "GDI handle growth: " + baseline + " -> " + final);
-                    Console.WriteLine("CHECKPOINT: component gallery");
-                    RenderGallery();
                     Console.WriteLine("WPF checks passed; GDI handles " + baseline + " -> " + final);
                     return 0;
                 }

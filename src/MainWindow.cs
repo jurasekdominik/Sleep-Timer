@@ -24,35 +24,34 @@ namespace SleepTimer
         readonly HourStop hourStop = new HourStop();
         readonly QuickTimers quickTimers = new QuickTimers(Settings.Get("quick_timers", ""));
         readonly Forms.NotifyIcon tray = new Forms.NotifyIcon();
-        readonly DispatcherTimer ticker = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(100) };
+        readonly DispatcherTimer ticker = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(100) };
         DispatcherTimer aborted;
         readonly TimerFace face = new TimerFace();
-        readonly Canvas main = new Canvas { Background = Brushes.Transparent };
-        readonly Grid settings = new Grid(), root = new Grid();
-        readonly StackPanel navigation = new StackPanel(), settingsBlocks = new StackPanel();
-        readonly List<Button> navigationButtons = new List<Button>(), swatches = new List<Button>();
-        readonly List<FrameworkElement> cards = new List<FrameworkElement>();
-        readonly Button picker = new Button { Width = Design.MainActionWidth };
+        readonly Canvas main = new Canvas(), settings = new Canvas();
+        readonly Grid root = new Grid();
+        readonly Button gear = new Button { Content = new GearMark(), Padding = new Thickness(0), Width = 30, Height = 30, ToolTip = "Settings" };
+        readonly ActionSelector picker = new ActionSelector();
         readonly ModeSelector modeSelector = new ModeSelector();
-        readonly TextBox clockField = new TextBox { MaxLength = 5, Width = Design.TimeWidth, TextAlignment = TextAlignment.Center, ToolTip = "24-hour time, HH:mm. Scroll hours or minutes; arrow keys adjust." };
-        readonly Button awakeChip = new Button { Width = Design.InputWidth * 2 };
+        readonly TextBox clockField = new TextBox { MaxLength = 5, Width = 101.333333, Height = 32, TextAlignment = TextAlignment.Center, ToolTip = "24-hour time, HH:mm. Scroll hours or minutes; arrow keys adjust." };
+        readonly Button awakeChip = new Button { Width = 160, Height = 32 };
         readonly ToggleButton awakeSwitch = new ToggleButton();
         readonly ToggleButton startupSwitch = new ToggleButton { IsChecked = Settings.Get("start_with_windows", false) };
         readonly ToggleButton forceSwitch = new ToggleButton { IsChecked = Settings.Get("force", true) };
-        readonly TextBlock forceNote = new TextBlock { FontSize = Design.Caption, Foreground = Theme.Brush(Theme.Faint) };
-        readonly Button accentButton = new Button { Width = Design.MainActionWidth, HorizontalAlignment = HorizontalAlignment.Left };
-        readonly TextBox accentField = new TextBox { MaxLength = 7, Width = Design.InputWidth };
-        readonly TextBox circleDuration = new TextBox { MaxLength = 5, TextAlignment = TextAlignment.Right, Width = Design.InputWidth };
-        readonly TextBox counterDuration = new TextBox { MaxLength = 5, TextAlignment = TextAlignment.Right, Width = Design.InputWidth };
-        readonly TextBlock animationNote = new TextBlock { FontSize = Design.Caption, Foreground = Theme.Brush(Theme.Faint), TextWrapping = TextWrapping.Wrap };
-        readonly TextBlock accentNote = new TextBlock { FontSize = Design.Caption, TextWrapping = TextWrapping.Wrap };
-        readonly TextBox quickMinutes = new TextBox { MaxLength = 4, Width = Design.InputWidth, Tag = "Minutes", ToolTip = "Whole minutes from 1 to 1440" };
-        readonly TextBlock quickNote = new TextBlock { FontSize = Design.Caption, TextWrapping = TextWrapping.Wrap };
-        readonly Button customChip = new Button();
-        readonly TextBlock pageTitle = new TextBlock { FontSize = Design.Title, FontWeight = FontWeights.SemiBold };
-        readonly TextBlock status = new TextBlock { FontSize = Design.Caption, VerticalAlignment = VerticalAlignment.Center };
-        readonly TextBlock awakeStatus = new TextBlock { FontSize = Design.Caption, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-        readonly PopupMenu trayMenu = new PopupMenu(), awakeMenu = new PopupMenu(), actionMenu = new PopupMenu(), customMenu = new PopupMenu();
+        readonly TextBox accentField = new TextBox { MaxLength = 7, Width = 90 };
+        readonly TextBox circleDuration = new TextBox { MaxLength = 5, TextAlignment = TextAlignment.Right };
+        readonly TextBox counterDuration = new TextBox { MaxLength = 5, TextAlignment = TextAlignment.Right };
+        readonly TextBlock animationNote = new TextBlock { FontSize = 12, Foreground = Theme.Brush(Theme.Faint) };
+        readonly TextBlock accentNote = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
+        readonly TextBox quickMinutes = new TextBox { MaxLength = 4, Width = 184, Tag = "Minutes", ToolTip = "Whole minutes from 1 to 1440" };
+        readonly TextBlock quickNote = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
+        readonly Button customChip = new Button { Width = 288 };
+        readonly PopupMenu trayMenu = new PopupMenu(), awakeMenu = new PopupMenu(160), customMenu = new PopupMenu(288);
+        readonly List<FrameworkElement> cards = new List<FrameworkElement>();
+        readonly List<Button> tabButtons = new List<Button>();
+        readonly List<Button> swatches = new List<Button>();
+        readonly Border tabUnderline = new Border { Height = 2.5 };
+        readonly TranslateTransform tabSlide = new TranslateTransform();
+        readonly List<double> tabPositions = new List<double>(), tabWidths = new List<double>();
         readonly TranslateTransform modeSlide = new TranslateTransform();
         Canvas mode;
         ColorPicker colorPicker;
@@ -65,10 +64,8 @@ namespace SleepTimer
         HwndSource source;
         public bool TestMode { get; set; }
 
-        public MainWindow(bool testMode = false)
+        public MainWindow()
         {
-            TestMode = testMode;
-            if (TestMode) Console.WriteLine("CHECKPOINT: construct window");
             countdown = new Countdown(Settings.Get("duration", Countdown.DefaultSeconds), () => clock.Elapsed.TotalSeconds);
             face.CircleMilliseconds = AnimationTiming.Normalize(Settings.Get("circle_sweep_ms", AnimationTiming.DefaultMilliseconds));
             face.CounterMilliseconds = AnimationTiming.Normalize(Settings.Get("counter_sweep_ms", AnimationTiming.DefaultMilliseconds));
@@ -81,31 +78,39 @@ namespace SleepTimer
             screenOn = Settings.Get("awake_screen", false);
             if (startupSwitch.IsChecked == true) Startup.Set(true);
             Title = "Sleep Timer"; SizeToContent = SizeToContent.WidthAndHeight;
+            root.Width = 368; root.Height = 508; root.Background = Theme.Brush(Theme.Bg);
             ResizeMode = ResizeMode.CanMinimize; WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            FontFamily = new FontFamily("Segoe UI"); FontSize = Design.Body; Foreground = Theme.Brush(Theme.Text);
+            Background = Theme.Brush(Theme.Bg); Content = root;
+            FontFamily = new FontFamily("Segoe UI"); FontSize = 14; Foreground = Theme.Brush(Theme.Text);
             TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
             TextOptions.SetTextRenderingMode(this, TextRenderingMode.ClearType);
-            Background = Theme.Brush(Theme.Bg); Content = root;
             UseLayoutRounding = true; SnapsToDevicePixels = true;
             Icon = BitmapFrame.Create(new Uri("pack://application:,,,/assets/SleepTimer.ico"));
-            root.Width = Design.Sidebar + Design.PageWidth; root.Height = Design.PageHeight + Design.StatusHeight;
-            root.Background = Theme.Brush(Theme.Bg);
-            root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Design.Sidebar) });
-            root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Design.PageWidth) });
-            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(Design.PageHeight) });
-            root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(Design.StatusHeight) });
-            main.Width = settings.Width = Design.PageWidth; main.Height = settings.Height = Design.PageHeight;
-            Grid.SetColumn(main, 1); Grid.SetColumn(settings, 1);
-            root.Children.Add(main); root.Children.Add(settings); settings.Visibility = Visibility.Collapsed;
-            if (TestMode) Console.WriteLine("CHECKPOINT: build shared controls");
-            BuildNavigation(); BuildMain(); BuildSettings(); BuildStatus();
-            if (TestMode) Console.WriteLine("CHECKPOINT: controls built");
+            main.Width = settings.Width = 368; main.Height = settings.Height = 508;
+            main.HorizontalAlignment = settings.HorizontalAlignment = HorizontalAlignment.Center;
+            main.VerticalAlignment = settings.VerticalAlignment = VerticalAlignment.Top;
+            root.Children.Add(main); root.Children.Add(settings);
+            settings.Visibility = Visibility.Collapsed;
+            BuildMain(); BuildSettings();
+            gear.HorizontalAlignment = HorizontalAlignment.Right; gear.VerticalAlignment = VerticalAlignment.Top; gear.Margin = new Thickness(0, 12, 24, 0);
+            gear.Style = (Style)FindResource("IconButton");
+            root.Children.Add(gear); gear.Click += (s, e) => ToggleSettings();
             face.Toggle += StartPause; face.Cancel += Cancel; face.Wheel += AddTime;
             main.PreviewMouseWheel += (s, e) =>
             {
-                // Preview includes the action dropdown as well as blank areas inside the watchface.
                 if (!face.ContainsDial(e.GetPosition(face))) return;
-                face.Scroll(e.Delta, Keyboard.Modifiers); e.Handled = true;
+                face.Scroll(e.Delta, Keyboard.Modifiers);
+                e.Handled = true;
+            };
+            main.PreviewMouseDown += (s, e) =>
+            {
+                if (!face.ContainsDial(e.GetPosition(face))) return;
+                // The action selector keeps its left-click interaction; the rest of the dial controls the timer.
+                if (e.ChangedButton == MouseButton.Left && picker.IsEnabled && picker.ContainsAction(e.GetPosition(picker))) return;
+                if (e.ChangedButton == MouseButton.Left) StartPause();
+                else if (e.ChangedButton == MouseButton.Right) Cancel();
+                else return;
+                e.Handled = true;
             };
             tray.MouseUp += (s, e) => { if (e.Button == Forms.MouseButtons.Right) Dispatcher.BeginInvoke((Action)ShowTrayMenu); };
             tray.MouseDoubleClick += (s, e) => { if (e.Button == Forms.MouseButtons.Left) Dispatcher.BeginInvoke((Action)ShowWindow); };
@@ -125,18 +130,17 @@ namespace SleepTimer
                 Dispose();
                 if (!TestMode) Application.Current.Shutdown();
             };
-            PreviewKeyDown += (s, e) => { if (e.Key == Key.Escape && settingsOpen) { ShowTimer(); e.Handled = true; } };
+            PreviewKeyDown += (s, e) => { if (e.Key == Key.Escape && settingsOpen) { ToggleSettings(); e.Handled = true; } };
             PreviewMouseDown += (s, e) =>
             {
                 if (!(e.OriginalSource is TextBox) && Keyboard.FocusedElement is TextBox box
                     && !IsDescendant(box, e.OriginalSource as DependencyObject)) Keyboard.ClearFocus();
             };
-
-            if (TestMode) Console.WriteLine("CHECKPOINT: create native window handle");
             new WindowInteropHelper(this).EnsureHandle();
-            if (TestMode) Console.WriteLine("CHECKPOINT: initialize window state");
-            SyncMode(false); ApplyAwake(); UpdateView(); RefreshNavigation(); ticker.Start();
+            SyncMode(false); ApplyAwake(); UpdateView();
+            ticker.Start();
         }
+
         static bool IsDescendant(DependencyObject parent, DependencyObject child)
         {
             while (child != null) { if (child == parent) return true; child = child is Visual ? VisualTreeHelper.GetParent(child) : null; }
@@ -147,254 +151,229 @@ namespace SleepTimer
             if (item is FrameworkElement f) { if (!double.IsNaN(width)) f.Width = width; if (!double.IsNaN(height)) f.Height = height; }
             Canvas.SetLeft(item, x); Canvas.SetTop(item, y); canvas.Children.Add(item);
         }
-        static TextBlock Label(string text, double size = Design.Body, bool secondary = false) => Design.TextLabel(text, size, secondary);
+        static TextBlock Label(string text, double size = 14, bool secondary = false) =>
+            new TextBlock { Text = text, FontSize = size, Foreground = Theme.Brush(secondary ? Theme.Second : Theme.Text), VerticalAlignment = VerticalAlignment.Center };
 
-        void BuildNavigation()
-        {
-            var sidebar = new Border { Background = Theme.Brush(Theme.Surface), BorderBrush = Theme.Brush(Theme.Border), BorderThickness = new Thickness(0, 0, Design.Line, 0) };
-            var dock = new DockPanel();
-            var collapse = new Button { Content = Icons.View(Icons.ChevronLeft), Style = (Style)FindResource("IconButton"), ToolTip = "Collapse navigation", Margin = new Thickness(Design.Gap) };
-            collapse.Click += (s, e) =>
-            {
-                bool collapsed = root.ColumnDefinitions[0].Width.Value < Design.Sidebar;
-                root.ColumnDefinitions[0].Width = new GridLength(collapsed ? Design.Sidebar : Design.CollapsedSidebar);
-                root.Width = (collapsed ? Design.Sidebar : Design.CollapsedSidebar) + Design.PageWidth;
-                foreach (var nav in navigationButtons)
-                    if (nav.Content is Grid grid && grid.Children.Count > 1)
-                    {
-                        grid.Children[1].Visibility = collapsed ? Visibility.Visible : Visibility.Collapsed;
-                        bool child = !Equals(nav.ToolTip, "Timer") && !Equals(nav.ToolTip, "Settings");
-                        nav.Margin = new Thickness(collapsed && child ? Design.ColumnGap : Design.Gap, 0, Design.Gap, child ? 0 : Design.Space);
-                    }
-                collapse.ToolTip = collapsed ? "Collapse navigation" : "Expand navigation";
-                collapse.Content = Icons.View(collapsed ? Icons.ChevronLeft : Icons.ChevronRight);
-            };
-            DockPanel.SetDock(collapse, Dock.Bottom); dock.Children.Add(collapse);
-            navigation.Margin = new Thickness(0, Design.PageEdge, 0, 0);
-            AddNavigation("Timer", Icons.Timer, -1, false);
-            AddNavigation("Settings", Icons.Settings, 0, false);
-            AddNavigation("General", Icons.Settings, 0, true);
-            AddNavigation("Appearance", Icons.Palette, 1, true);
-            AddNavigation("Timers", Icons.List, 2, true);
-            dock.Children.Add(navigation); sidebar.Child = dock; root.Children.Add(sidebar);
-        }
-        void AddNavigation(string text, string icon, int page, bool child)
-        {
-            var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Design.NavIcon + Design.IconGap) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition());
-            grid.Children.Add(Icons.View(icon, Design.NavIcon));
-            var label = Label(text); Grid.SetColumn(label, 1); grid.Children.Add(label);
-            var b = new Button { Content = grid, ToolTip = text, Tag = page, Height = child ? Design.Field - Design.Space / 2 : Design.Field,
-                HorizontalContentAlignment = HorizontalAlignment.Stretch, Style = (Style)FindResource("NavButton"),
-                Margin = new Thickness(child ? Design.ColumnGap : Design.Gap, 0, Design.Gap, child ? 0 : Design.Space) };
-            b.Click += (s, e) => { if (page < 0) ShowTimer(); else { settingsOpen = true; SelectTab(page); } };
-            navigation.Children.Add(b); navigationButtons.Add(b);
-        }
-        void RefreshNavigation()
-        {
-            foreach (var b in navigationButtons)
-            {
-                bool active = (int)b.Tag == (settingsOpen ? selectedTab : -1) && !Equals(b.ToolTip, "Settings");
-                b.Background = active ? Theme.Brush(Theme.Blend(Theme.Surface, Theme.Accent, .15)) : Brushes.Transparent;
-                b.BorderBrush = active ? Theme.Brush(Theme.Accent) : Brushes.Transparent;
-                b.BorderThickness = active ? new Thickness(Design.ActiveMarker, 0, 0, 0) : new Thickness(0);
-            }
-        }
-        void BuildStatus()
-        {
-            var bar = new Border { Background = Theme.Brush(Theme.Surface), BorderBrush = Theme.Brush(Theme.Border),
-                BorderThickness = new Thickness(0, Design.Line, 0, 0), Padding = new Thickness(Design.PageEdge, 0, Design.PageEdge, 0) };
-            var grid = new Grid(); grid.ColumnDefinitions.Add(new ColumnDefinition()); grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            grid.Children.Add(status); Grid.SetColumn(awakeStatus, 1); grid.Children.Add(awakeStatus);
-            bar.Child = grid; Grid.SetColumnSpan(bar, 2); Grid.SetRow(bar, 1); root.Children.Add(bar);
-        }
         void BuildMain()
         {
-            Place(main, new TextBlock { Text = "Timer", FontSize = Design.Title, FontWeight = FontWeights.SemiBold }, Design.PageEdge, Design.PageEdge);
-            Place(main, Label("Times use this PC's time zone.", Design.Caption, true), Design.PageEdge, Design.PageEdge + Design.Field);
-            Place(main, face, Design.DialLeft, Design.DialTop);
-            picker.Style = (Style)FindResource("DropdownButton");
-            Place(main, picker, Design.MainActionLeft, Design.MainActionTop);
-            picker.Click += (s, e) =>
-            {
-                if (actionMenu.Visible || actionMenu.JustClosed) return;
-                actionMenu.Show(PowerAction.All.Select(a => new MenuRow { Text = a.Label, Selected = a.Key == action.Key, Click = () => SetAction(a.Key) }), picker);
-            };
-            mode = new Canvas { Width = Design.DialWidth, Height = Design.Field };
+            Place(main, face, 24, 12);
+            Place(main, picker, 44, 182);
+            picker.Changed += SetAction;
+            mode = new Canvas { Width = 320, Height = 32 };
             modeSelector.RenderTransform = modeSlide;
             Place(mode, modeSelector, 0, 0);
-            Place(mode, clockField, Design.ClockLeft, 0, Design.TimeWidth, Design.Field);
-            Place(main, mode, Design.DialLeft, Design.ModeTop);
+            Place(mode, clockField, 218.6666667, 0, 101.3333333, 32);
+            Place(main, mode, 24, 356);
             modeSelector.Changed += SetMode;
             clockField.LostKeyboardFocus += (s, e) => CommitClock();
             clockField.KeyDown += (s, e) =>
             {
                 if (e.Key == Key.Enter) { CommitClock(); Keyboard.ClearFocus(); e.Handled = true; }
                 else if (e.Key == Key.Up || e.Key == Key.Down)
-                { EditClock((e.Key == Key.Up ? 1 : -1) * (clockField.CaretIndex < 3 ? 60 : 1)); e.Handled = true; }
+                {
+                    EditClock((e.Key == Key.Up ? 1 : -1) * (clockField.CaretIndex < 3 ? 60 : 1)); e.Handled = true;
+                }
             };
             clockField.PreviewMouseWheel += (s, e) =>
             {
                 if (!clockField.IsEnabled) return;
-                EditClock(Math.Sign(e.Delta) * (e.GetPosition(clockField).X < clockField.ActualWidth / 2 ? 60 : 1)); e.Handled = true;
+                bool hours = e.GetPosition(clockField).X < clockField.ActualWidth / 2;
+                EditClock(Math.Sign(e.Delta) * (hours ? 60 : 1)); e.Handled = true;
             };
-            Place(main, Label("Keep awake", Design.Label), Design.PageEdge, Design.AwakeTop, Design.InputWidth + Design.PageEdge, Design.Field);
-            awakeChip.Style = (Style)FindResource("DropdownButton");
-            Place(main, awakeChip, Design.InputWidth + Design.DialogEdge + Design.DialogEdge, Design.AwakeTop);
-            Place(main, awakeSwitch, Design.PageWidth - Design.PageEdge - Design.SwitchWidth, Design.AwakeTop + (Design.Field - Design.SwitchHeight) / 2);
-            awakeChip.Click += (s, e) => { if (!awakeMenu.Visible && !awakeMenu.JustClosed) awakeMenu.Show(AwakeRows(), awakeChip); };
+            var awakeLabel = Label("Keep awake");
+            awakeLabel.Cursor = Cursors.Hand; awakeLabel.MouseLeftButtonUp += (s, e) => SetAwake(awakeMinutes == 0 ? -1 : 0);
+            Place(main, awakeLabel, 24, 410, 96, 24);
+            awakeChip.Style = (Style)FindResource("ChipButton");
+            Place(main, awakeChip, 128, 404);
+            Place(main, awakeSwitch, 300, 408);
+            awakeChip.Click += (s, e) => { if (!awakeMenu.Visible && !awakeMenu.JustClosed) awakeMenu.Show(ChipRows(), awakeChip); };
             awakeSwitch.Click += (s, e) => { if (!syncing) SetAwake(awakeSwitch.IsChecked == true ? -1 : 0); };
-            awakeSwitch.ToolTip = "Keep this PC awake";
-            Place(main, Label("Scroll to adjust · Click to start or pause", Design.Caption, true), Design.PageEdge, Design.HintTop);
+            awakeSwitch.ToolTip = "Keep the PC awake until you turn this off";
+            AddFooter(main);
+        }
+
+        void AddFooter(Canvas parent)
+        {
+            Place(parent, new Border { Background = Theme.Brush(Theme.Border) }, 24, 452, 320, 1);
+            Place(parent, new BrandFooter(), 24, 464, 320, 28);
+        }
+
+        Border Card(int tab, double y, double height)
+        {
+            var card = new Border { CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1), Child = new Canvas(), Tag = tab };
+            card.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
+            card.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+            Place(settings, card, 24, y, 320, height); cards.Add(card); return card;
         }
         void BuildSettings()
         {
-            settings.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            settings.RowDefinitions.Add(new RowDefinition());
-            pageTitle.Margin = new Thickness(Design.PageEdge); settings.Children.Add(pageTitle);
-            var scroll = new CompactScrollViewer { Content = settingsBlocks, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Padding = new Thickness(Design.PageEdge, 0, Design.PageEdge, Design.PageEdge) };
-            Grid.SetRow(scroll, 1); settings.Children.Add(scroll);
-            var general = AddBlock(0, "Startup and power");
-            AddSwitchRow(general, "Start with Windows", "Opens in the tray when you sign in.", startupSwitch);
-            AddSwitchRow(general, "Force close apps", null, forceSwitch, forceNote);
+            Place(settings, new TextBlock { Text = "Settings", FontSize = 15, FontWeight = FontWeights.SemiBold }, 24, 20, 200, 24);
+            var tabs = new Canvas { Width = 320, Height = 24 };
+            string[] names = { "GENERAL", "APPEARANCE", "TIMERS" };
+            double tabX = 0;
+            for (int i = 0; i < names.Length; i++)
+            {
+                int tab = i;
+                string spaced = string.Join(" ", names[i].ToCharArray());
+                double width = VisualText.Make(this, spaced, 12, Theme.Text, true).WidthIncludingTrailingWhitespace;
+                tabPositions.Add(tabX); tabWidths.Add(width);
+                var b = new Button { Content = spaced, FontSize = 12, FontWeight = FontWeights.SemiBold, Width = width + 4, Height = 17,
+                    Style = (Style)FindResource("TextButton"), HorizontalContentAlignment = HorizontalAlignment.Left };
+                b.Click += (s, e) => SelectTab(tab); tabButtons.Add(b); Place(tabs, b, tabX, 0);
+                tabX += width + 22;
+            }
+            tabUnderline.RenderTransform = tabSlide;
+            tabUnderline.SetResourceReference(Border.BackgroundProperty, "AccentBrush");
+            Place(tabs, tabUnderline, 0, 18, tabWidths[0], 2.5);
+            Place(settings, tabs, 24, 56, 320, 24);
+            var general = (Canvas)Card(0, 88, 128).Child;
+            SwitchRow(general, "Start with Windows", "Opens in the tray when you sign in", startupSwitch, 0);
+            SwitchRow(general, "Force close apps", "Skips “save changes?” prompts (/f)", forceSwitch, 64);
             startupSwitch.Click += (s, e) => { bool on = startupSwitch.IsChecked == true; Startup.Set(on); Settings.Set("start_with_windows", on); };
             forceSwitch.Click += (s, e) => Settings.Set("force", forceSwitch.IsChecked == true);
-            var help = AddBlock(0, "Timer controls");
-            var helpPanel = new StackPanel();
-            string[,] keys = { { "Left-click the dial", "Start / pause" }, { "Right-click the dial", "Cancel" }, { "Scroll", "±5 min" },
-                { "Alt + scroll", "±1 min" }, { "Shift + scroll", "±15 min" }, { "Ctrl + scroll", "±30 min" }, { "Ctrl+Shift + scroll", "±60 min" }, { "Whole-hour stop", "400 ms" } };
-            for (int i = 0; i < keys.GetLength(0); i++)
+            var help = (Canvas)Card(0, 232, 184).Child;
+            string[,] rows = { { "Left-click the ring", "Start · Pause" }, { "Right-click the ring", "Cancel" }, { "Scroll", "±5 min" }, { "Alt + scroll", "±1 min" },
+                { "Shift + scroll", "±15 min" }, { "Ctrl + scroll", "±30 min" }, { "Ctrl+Shift + scroll", "±60 min" }, { "Whole-hour stop", "400 ms" } };
+            for (int i = 0; i < rows.GetLength(0); i++)
             {
-                var row = new Grid { Height = Design.Field }; row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                row.Children.Add(Label(keys[i, 0], Design.Body, true));
-                var value = Label(keys[i, 1], Design.Mono); value.FontFamily = VisualText.Mono; Grid.SetColumn(value, 1); row.Children.Add(value); helpPanel.Children.Add(row);
+                Place(help, Label(rows[i, 0], 12, true), 20, 12 + i * 20, 160, 20);
+                var right = Label(rows[i, 1], 12); right.TextAlignment = TextAlignment.Right;
+                Place(help, right, 180, 12 + i * 20, 120, 20);
             }
-            help.Children.Add(new Border { Child = helpPanel, Background = Theme.Brush(Theme.Surface), CornerRadius = Design.CardCorner, Padding = new Thickness(Design.BlockPadding) });
-
-            var accent = AddBlock(1, "Accent colour");
-            var colourCells = PairGrid();
-            var currentCell = new StackPanel();
-            currentCell.Children.Add(new TextBlock { Text = "Current colour", FontSize = Design.Label, Margin = new Thickness(0, 0, 0, Design.Space) });
-            accentButton.Style = (Style)FindResource("DropdownButton"); accentButton.Content = AccentPreview();
-            accentButton.Click += (s, e) => OpenColorHelper(); currentCell.Children.Add(accentButton); colourCells.Children.Add(currentCell);
-            var custom = new StackPanel();
-            custom.Children.Add(new TextBlock { Text = "Custom colour", FontSize = Design.Label, Margin = new Thickness(0, 0, 0, Design.Space) });
-            accentField.HorizontalAlignment = HorizontalAlignment.Left;
-            custom.Children.Add(accentField); Grid.SetColumn(custom, 2); colourCells.Children.Add(custom); accent.Children.Add(colourCells);
-            accentNote.Margin = new Thickness(0, Design.Space, 0, 0); accent.Children.Add(accentNote);
+            var appearance = (Canvas)Card(1, 88, 160).Child;
+            Place(appearance, Label("Accent colour"), 20, 16, 280, 24);
+            Place(appearance, accentNote, 20, 38, 280, 18);
+            string[] colors = { "#0CD29D", "#BADC58", "#FFB142", "#FF793F", "#FD79A8", "#8C7AE6", "#A29BFE", "#34ACE0" };
+            for (int i = 0; i < colors.Length; i++)
+            {
+                string hex = colors[i]; Color color = Theme.Hex(hex);
+                var dot = new System.Windows.Shapes.Ellipse { Fill = Theme.Brush(color), Width = 28, Height = 28 };
+                var b = new Button { Content = dot, Padding = new Thickness(3), Width = 36, Height = 36, Background = Brushes.Transparent, ToolTip = hex, Tag = hex, Style = (Style)FindResource("SwatchButton") };
+                b.Click += (s, e) => ApplyAccent(color); swatches.Add(b);
+                Place(appearance, b, 14 + i % 4 * 40, 58 + i / 4 * 40);
+            }
+            Place(appearance, Label("Custom", 12, true), 212, 70, 88, 16);
+            Place(appearance, accentField, 212, 104, 88, 32);
+            accentField.PreviewMouseLeftButtonDown += (s, e) => OpenColorHelper();
             accentField.Text = "#" + Theme.Accent.R.ToString("X2") + Theme.Accent.G.ToString("X2") + Theme.Accent.B.ToString("X2");
             accentField.TextChanged += (s, e) =>
             {
                 if (syncing) return;
-                string hex = accentField.Text.Trim(); if (!hex.StartsWith("#")) hex = "#" + hex;
+                string hex = accentField.Text.Trim();
+                if (!hex.StartsWith("#")) hex = "#" + hex;
                 if (System.Text.RegularExpressions.Regex.IsMatch(hex, "^#[0-9A-Fa-f]{6}$")) ApplyAccent(Theme.Hex(hex), true);
             };
-            var animation = AddBlock(1, "Animation duration", "Lower values are faster. Use 0 for an instant change.");
-            var durationGrid = PairGrid();
-            AddAnimationInput(durationGrid, "Circle sweep (ms)", circleDuration, 0, true);
-            AddAnimationInput(durationGrid, "Counter (ms)", counterDuration, 2, false);
-            animation.Children.Add(durationGrid); animationNote.Margin = new Thickness(0, Design.Space, 0, 0);
-            animationNote.Text = "Defaults: 600 ms. Values save when you leave a field."; animation.Children.Add(animationNote);
-
-            var timers = AddBlock(2, "Quick timers", "Start presets from the tray using the selected action.");
-            timers.Children.Add(Label("Built in: 30 min, 1 h, 2 h, 4 h", Design.Caption, true));
-            timers.Children.Add(new TextBlock { Text = "Duration (minutes)", FontSize = Design.Label, Margin = new Thickness(0, Design.BlockPadding, 0, Design.Space) });
-            var addRow = new StackPanel { Orientation = Orientation.Horizontal };
-            addRow.Children.Add(quickMinutes);
-            var add = new Button { Content = "Add timer", MinWidth = Design.ButtonMin, Margin = new Thickness(Design.Gap, 0, 0, 0), Style = (Style)FindResource("PrimaryButton") };
-            addRow.Children.Add(add); timers.Children.Add(addRow);
+            var animationCard = (Canvas)Card(1, 264, 160).Child;
+            Place(animationCard, Label("Animation duration"), 20, 12, 280, 24);
+            AddAnimationInput(animationCard, "Circle sweep", circleDuration, 44, true);
+            AddAnimationInput(animationCard, "Numerical counter", counterDuration, 84, false);
+            animationNote.Text = "Enter to save · smaller = faster · 0 = instant";
+            Place(animationCard, animationNote, 20, 132, 280, 18);
+            var timerCard = (Canvas)Card(2, 88, 224).Child;
+            Place(timerCard, Label("Quick timers"), 16, 16, 288, 24);
+            Place(timerCard, Label("Start from the tray using the selected action.", 12, true), 16, 48, 288, 20);
+            Place(timerCard, Label("Built in: 30 min, 1 h, 2 h, 4 h", 12, true), 16, 72, 288, 20);
+            Place(timerCard, quickMinutes, 16, 104, 184, 32);
+            var add = new Button { Content = "Add timer", Width = 96, Height = 32, Padding = new Thickness(4), Style = (Style)FindResource("PrimaryButton") };
+            Place(timerCard, add, 208, 104);
             add.Click += (s, e) => AddQuickTimer();
             quickMinutes.KeyDown += (s, e) => { if (e.Key == Key.Enter) { AddQuickTimer(); e.Handled = true; } };
-            quickNote.Margin = new Thickness(0, Design.Space, 0, Design.BlockPadding);
-            quickNote.Text = "Enter 1–1440 minutes."; quickNote.Foreground = Theme.Brush(Theme.Faint); timers.Children.Add(quickNote);
-            customChip.Style = (Style)FindResource("DropdownButton"); customChip.HorizontalAlignment = HorizontalAlignment.Left; timers.Children.Add(customChip);
-            customChip.Click += (s, e) => customMenu.Show(quickTimers.Custom.Select(m => new MenuRow { Text = QuickTimers.Label(m), Right = "Remove", Danger = true, Click = () =>
-            { quickTimers.Remove(m); Settings.Set("quick_timers", quickTimers.Save()); RefreshQuickTimers(); } }), customChip);
-            RefreshQuickTimers(); AccentNote(); SelectTab(0);
-        }
-        StackPanel AddBlock(int tab, string title, string help = null)
-        {
-            var block = Design.Block(title, help); block.Tag = tab; cards.Add(block); settingsBlocks.Children.Add(block); return block;
-        }
-        static Grid PairGrid()
-        {
-            var grid = new Grid(); grid.ColumnDefinitions.Add(new ColumnDefinition());
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Design.FieldPairGap) }); grid.ColumnDefinitions.Add(new ColumnDefinition()); return grid;
-        }
-        static void AddSwitchRow(StackPanel parent, string title, string caption, ToggleButton control, TextBlock description = null)
-        {
-            var row = new Grid { MinHeight = caption == null && description == null ? Design.SettingsRow : Design.DescribedRow };
-            row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            text.Children.Add(Label(title, Design.Label));
-            if (description != null || caption != null)
+            quickNote.Text = "Enter 1–1440 minutes"; quickNote.Foreground = Theme.Brush(Theme.Faint);
+            Place(timerCard, quickNote, 16, 144, 288, 20);
+            customChip.Style = (Style)FindResource("ChipButton");
+            Place(timerCard, customChip, 16, 176, 288, 32);
+            customChip.Click += (s, e) => customMenu.Show(quickTimers.Custom.Select(m => new MenuRow
             {
-                var note = description ?? Label(caption, Design.Caption, true);
-                note.TextWrapping = TextWrapping.Wrap; note.MaxWidth = Design.SettingsContent - Design.SwitchWidth - Design.PageEdge;
-                text.Children.Add(note);
-            }
-            row.Children.Add(text); control.VerticalAlignment = VerticalAlignment.Center; control.Margin = new Thickness(Design.Gap, 0, 0, 0);
-            Grid.SetColumn(control, 1); row.Children.Add(control); parent.Children.Add(row);
+                Text = QuickTimers.Label(m), Right = "Remove", Click = () =>
+                {
+                    quickTimers.Remove(m); Settings.Set("quick_timers", quickTimers.Save()); RefreshQuickTimers();
+                }
+            }), customChip);
+            SelectTab(0); RefreshQuickTimers(); AccentNote(); AddFooter(settings);
         }
-        void AddAnimationInput(Grid grid, string label, TextBox input, int column, bool circle)
+        void AddAnimationInput(Canvas card, string label, TextBox input, double y, bool circle)
         {
-            var cell = new StackPanel();
-            cell.Children.Add(new TextBlock { Text = label, FontSize = Design.Label, Margin = new Thickness(0, 0, 0, Design.Space) });
-            input.HorizontalAlignment = HorizontalAlignment.Left;
+            Place(card, Label(label), 20, y, 168, 32);
             input.Text = (circle ? face.CircleMilliseconds : face.CounterMilliseconds).ToString(CultureInfo.InvariantCulture);
-            input.ToolTip = "0–10000 ms. Default 600 ms. Enter or leave the field to save."; cell.Children.Add(input);
-            Grid.SetColumn(cell, column); grid.Children.Add(cell);
+            input.ToolTip = "0–10000 milliseconds. Default: 600 ms. Press Enter or leave the field to save.";
+            Place(card, input, 196, y, 80, 32);
+            Place(card, Label("ms", 12, true), 284, y, 24, 32);
             input.LostKeyboardFocus += (s, e) => CommitAnimationInput(input, circle);
             input.KeyDown += (s, e) =>
             {
                 if (e.Key == Key.Enter) { CommitAnimationInput(input, circle); e.Handled = true; }
                 else if (e.Key == Key.Escape)
-                { input.Text = (circle ? face.CircleMilliseconds : face.CounterMilliseconds).ToString(CultureInfo.InvariantCulture); CommitAnimationInput(input, circle); e.Handled = true; }
+                {
+                    input.Text = (circle ? face.CircleMilliseconds : face.CounterMilliseconds).ToString(CultureInfo.InvariantCulture);
+                    CommitAnimationInput(input, circle); e.Handled = true;
+                }
             };
-        }
-        FrameworkElement AccentPreview()
-        {
-            var row = new StackPanel { Orientation = Orientation.Horizontal };
-            row.Children.Add(new Border { Width = Design.Icon, Height = Design.Icon, CornerRadius = Design.ControlCorner, Background = Theme.Brush(Theme.Accent),
-                Margin = new Thickness(0, 0, Design.IconGap, 0), VerticalAlignment = VerticalAlignment.Center });
-            row.Children.Add(Label("#" + Theme.Accent.R.ToString("X2") + Theme.Accent.G.ToString("X2") + Theme.Accent.B.ToString("X2")));
-            return row;
         }
         void CommitAnimationInput(TextBox input, bool circle)
         {
             if (!AnimationTiming.TryParse(input.Text.Trim(), out int milliseconds))
             {
-                input.BorderBrush = Theme.Brush(Theme.Danger); animationNote.Text = "Enter a whole number from 0 to 10000 ms."; animationNote.Foreground = Theme.Brush(Theme.Danger); return;
+                input.BorderBrush = Theme.Brush(Theme.Danger);
+                animationNote.Text = "Use a whole number from 0 to 10000 ms.";
+                animationNote.Foreground = Theme.Brush(Theme.Danger);
+                return;
             }
-            if (circle) face.CircleMilliseconds = milliseconds; else face.CounterMilliseconds = milliseconds;
-            Settings.Set(circle ? "circle_sweep_ms" : "counter_sweep_ms", milliseconds); input.Text = milliseconds.ToString(CultureInfo.InvariantCulture);
+            if (circle) face.CircleMilliseconds = milliseconds;
+            else face.CounterMilliseconds = milliseconds;
+            Settings.Set(circle ? "circle_sweep_ms" : "counter_sweep_ms", milliseconds);
+            input.Text = milliseconds.ToString(CultureInfo.InvariantCulture);
             input.SetResourceReference(TextBox.BorderBrushProperty, "BorderBrush");
-            bool valid = AnimationTiming.TryParse(circleDuration.Text.Trim(), out _) && AnimationTiming.TryParse(counterDuration.Text.Trim(), out _);
-            animationNote.Text = valid ? "Defaults: 600 ms. Values save when you leave a field." : "Enter a whole number from 0 to 10000 ms.";
-            animationNote.Foreground = Theme.Brush(valid ? Theme.Faint : Theme.Danger);
+            animationNote.Text = "Enter to save · smaller = faster · 0 = instant";
+            animationNote.Foreground = Theme.Brush(Theme.Faint);
         }
+
+        static void SwitchRow(Canvas parent, string title, string note, ToggleButton toggle, double y)
+        {
+            TextBlock label = Label(title), detail = Label(note, 12, true);
+            Place(parent, label, 20, y + 12, 230, 20);
+            Place(parent, detail, 20, y + 34, 230, 18);
+            Place(parent, toggle, 256, y + 20);
+            label.Cursor = detail.Cursor = Cursors.Hand;
+            MouseButtonEventHandler click = (s, e) =>
+            {
+                if (!toggle.IsEnabled) return;
+                toggle.IsChecked = toggle.IsChecked != true;
+                toggle.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            };
+            label.MouseLeftButtonUp += click; detail.MouseLeftButtonUp += click;
+        }
+
         void SelectTab(int tab)
         {
             selectedTab = tab;
-            foreach (var block in cards) block.Visibility = (int)block.Tag == tab ? Visibility.Visible : Visibility.Collapsed;
-            pageTitle.Text = tab == 0 ? "General" : tab == 1 ? "Appearance" : "Timers";
-            if (settingsOpen) ShowPage(true);
-            RefreshNavigation();
+            for (int i = 0; i < tabButtons.Count; i++) tabButtons[i].Foreground = Theme.Brush(i == tab ? Theme.Text : Theme.Faint);
+            if (tabPositions.Count > tab)
+            {
+                tabSlide.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(tabSlide.X, tabPositions[tab], TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+                tabUnderline.BeginAnimation(WidthProperty, new DoubleAnimation(double.IsNaN(tabUnderline.Width) ? tabWidths[0] : tabUnderline.Width, tabWidths[tab], TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+            }
+            foreach (var card in cards)
+            {
+                bool shown = (int)card.Tag == tab;
+                card.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
+                if (shown) card.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)));
+            }
+            Keyboard.ClearFocus();
         }
-        void ShowPage(bool showSettings)
+        void ToggleSettings()
         {
-            settingsOpen = showSettings;
-            var from = showSettings ? (FrameworkElement)main : settings;
-            var to = showSettings ? (FrameworkElement)settings : main;
-            to.Visibility = Visibility.Visible; to.IsHitTestVisible = true; from.IsHitTestVisible = false;
-            from.Visibility = Visibility.Collapsed;
-            to.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(Design.Motion)));
-            RefreshNavigation(); Keyboard.ClearFocus();
+            settingsOpen = !settingsOpen;
+            var from = settingsOpen ? main : settings;
+            var to = settingsOpen ? settings : main;
+            from.IsHitTestVisible = false; to.IsHitTestVisible = true; to.Visibility = Visibility.Visible;
+            var hide = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(220));
+            hide.Completed += (s, e) => { if ((settingsOpen ? main : settings) == from) from.Visibility = Visibility.Collapsed; };
+            from.BeginAnimation(OpacityProperty, hide);
+            to.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)));
+            ((GearMark)gear.Content).Active = settingsOpen; ((GearMark)gear.Content).InvalidateVisual();
+            gear.Background = settingsOpen ? Theme.Brush(Theme.Surface) : Brushes.Transparent; Keyboard.ClearFocus();
         }
-        void ShowTimer() => ShowPage(false);
-        void ToggleSettings() { if (settingsOpen) ShowTimer(); else { settingsOpen = true; SelectTab(selectedTab); } }
+
         void SetMode(bool clock)
         {
             if (countdown.State != TimerState.Idle || executing) return;
@@ -404,14 +383,14 @@ namespace SleepTimer
         }
         void SyncMode(bool animate)
         {
-            double x = clockMode ? 0 : (Design.DialWidth - Design.ModeWidth) / 2;
-            if (animate) modeSlide.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(modeSlide.X, x, TimeSpan.FromMilliseconds(Design.TabMotion)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+            double x = clockMode ? 0 : 54.6666667;
+            if (animate) modeSlide.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(modeSlide.X, x, TimeSpan.FromMilliseconds(320)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
             else { modeSlide.BeginAnimation(TranslateTransform.XProperty, null); modeSlide.X = x; }
             modeSelector.Set(clockMode, animate);
             if (clockMode) clockField.Visibility = Visibility.Visible;
             if (animate)
             {
-                var fade = new DoubleAnimation(clockField.Opacity, clockMode ? 1 : 0, TimeSpan.FromMilliseconds(Design.TabMotion)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                var fade = new DoubleAnimation(clockField.Opacity, clockMode ? 1 : 0, TimeSpan.FromMilliseconds(320)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
                 fade.Completed += (s, e) => { if (!clockMode) clockField.Visibility = Visibility.Hidden; };
                 clockField.BeginAnimation(OpacityProperty, fade);
             }
@@ -519,21 +498,18 @@ namespace SleepTimer
         void ApplyAccent(Color color, bool fromField)
         {
             Theme.Accent = color; Theme.UpdateResources(Application.Current.Resources);
-            accentButton.Content = AccentPreview();
             string hex = "#" + color.R.ToString("X2") + color.G.ToString("X2") + color.B.ToString("X2");
             Settings.Set("accent", hex);
             if (!fromField) { syncing = true; accentField.Text = hex; syncing = false; }
-            AccentNote(); iconKey = null; RefreshNavigation(); SyncMode(false); UpdateView();
+            AccentNote(); iconKey = null; SelectTab(selectedTab); SyncMode(false); UpdateView();
             foreach (var visual in main.Children.OfType<FrameworkElement>().Concat(settings.Children.OfType<FrameworkElement>())) visual.InvalidateVisual();
-            picker.InvalidateVisual();
+            picker.InvalidateVisual(); ((GearMark)gear.Content).InvalidateVisual();
         }
         void AccentNote()
         {
-            double cr = Theme.Contrast(Theme.Accent, Theme.Surface);
-            accentNote.Text = cr >= 4.5 ? "Applied to the dial, selection and controls." : "Small accent labels are lightened for readability.";
-            bool closeToStatus = new[] { Design.Success, Design.Warning, Design.Danger, Design.Info }.Any(s => Math.Pow(s.R - Theme.Accent.R, 2) + Math.Pow(s.G - Theme.Accent.G, 2) + Math.Pow(s.B - Theme.Accent.B, 2) < 65 * 65);
-            if (closeToStatus) accentNote.Text = "This accent is close to a status colour.";
-            accentNote.Foreground = Theme.Brush(cr >= 4.5 ? Theme.Faint : Design.Warning);
+            double cr = Theme.Contrast(Theme.Accent, Theme.Bg);
+            accentNote.Text = cr >= 3 ? "The ring, buttons, switches and the tray icon" : "Low contrast (" + cr.ToString("0.0", CultureInfo.InvariantCulture) + " : 1) — hard to read";
+            accentNote.Foreground = Theme.Brush(cr >= 3 ? Theme.Faint : Theme.Danger);
             foreach (var b in swatches) b.BorderBrush = Theme.Brush(string.Equals((string)b.Tag, accentField.Text, StringComparison.OrdinalIgnoreCase) ? Theme.Accent : Colors.Transparent);
         }
 
@@ -548,7 +524,12 @@ namespace SleepTimer
             { screenOn = !screenOn; Settings.Set("awake_screen", screenOn); ApplyAwake(); UpdateView(); } });
             return rows;
         }
-        List<MenuRow> ChipRows() => AwakeRows();
+        List<MenuRow> ChipRows()
+        {
+            var rows = new List<MenuRow> { new MenuRow { Text = Convert.ToString(awakeChip.Content), Header = true }, new MenuRow { Separator = true } };
+            rows.AddRange(AwakeRows().Where(r => !r.Selected || r.Text == "Keep screen on"));
+            return rows;
+        }
         List<MenuRow> TrayRows()
         {
             if (trayPage == 3)
@@ -595,9 +576,7 @@ namespace SleepTimer
                 menu.Add(new MenuRow { Separator = true });
                 menu.Add(new MenuRow { Text = "Quick start", Right = TimeText.Human(minutes * 60), Enabled = !executing, Click = () => StartQuickTimer(minutes) });
             }
-            menu.Add(new MenuRow { Separator = true });
-            menu.Add(new MenuRow { Text = "Project on GitHub", Click = () => Native.OpenUrl("https://github.com/jurasekdominik/sleep-timer") });
-            menu.Add(new MenuRow { Text = "Quit", Danger = true, Click = Quit });
+            menu.Add(new MenuRow { Separator = true }); menu.Add(new MenuRow { Text = "Quit", Danger = true, Click = Quit });
             return menu;
         }
         void SetTrayPage(int page) { trayPage = page; trayMenu.SetRows(TrayRows()); }
@@ -655,17 +634,14 @@ namespace SleepTimer
                 face.Title = state == TimerState.Running ? action.RunTitle : "PAUSED"; face.Time = TimeText.Clock(seconds);
                 face.Sub = state == TimerState.Running ? action.At + " " + DateTime.Now.AddSeconds(seconds).ToString("HH:mm") : "Resume to continue";
             }
-            if (!string.IsNullOrEmpty(face.Title)) face.Title = char.ToUpperInvariant(face.Title[0]) + face.Title.Substring(1).ToLowerInvariant();
-            face.Tone = TimerStatus.Tone(state, seconds); face.UpdatePosition(seconds, animate, state == TimerState.Running);
-            picker.Content = action.Label; picker.IsEnabled = mode.IsEnabled = idle;
             Title = face.Time + " · " + (idle ? clockMode ? "Scheduled" : "Ready" : state == TimerState.Running ? "Running" : "Paused");
-            status.Text = Title; status.Foreground = Theme.Brush(state == TimerState.Running ? Theme.SmallAccent : Theme.Second);
-            forceSwitch.IsEnabled = true;
-            forceNote.Text = action.Key == "sleep" ? "Ignored for sleep; used for shutdown and restart." : "Skips save prompts when shutting down or restarting.";
+            face.Tone = TimerStatus.Tone(state, seconds); face.UpdatePosition(seconds, animate, state == TimerState.Running);
+            picker.SetCurrent(action.Key); picker.IsEnabled = mode.IsEnabled = idle;
+            forceSwitch.IsEnabled = action.Key != "sleep";
             string awake = awakeMinutes < 0 ? "on" : awakeMinutes > 0 ? TimeText.Clock(awakeEnd - clock.Elapsed.TotalSeconds) : null;
             awakeChip.Content = awake == null ? "Off" : awakeMinutes < 0 ? "Indefinitely" : awake + " left";
-            awakeChip.Background = Theme.Brush(Theme.Surface);
-            awakeChip.Foreground = Theme.Brush(Theme.Text);
+            awakeChip.Background = Theme.Brush(awake == null ? Theme.Surface : Theme.Blend(Theme.Surface, Theme.Accent, .18));
+            awakeChip.Foreground = Theme.Brush(awake == null ? Theme.Second : Theme.Blend(Theme.Accent, Colors.White, .22));
             syncing = true; awakeSwitch.IsChecked = awake != null; syncing = false;
             if (awakeMenu.Visible) awakeMenu.SetRows(ChipRows());
             if (trayMenu.Visible) trayMenu.SetRows(TrayRows());
@@ -673,8 +649,6 @@ namespace SleepTimer
                 : state == TimerState.Paused ? "Paused · " + TimeText.Clock(seconds) + " left · " + TimerStatus.Complete(countdown.Fraction) + "% complete"
                 : "Sleep Timer - not started (" + idleLabel + ")";
             if (awake != null) tip += "\nKeep awake: " + awake;
-            awakeStatus.Text = awake == null ? "Keep awake off" : awakeMinutes < 0 ? "Keep awake on" : "Awake " + awake;
-            awakeStatus.Foreground = Theme.Brush(Theme.Faint);
             tray.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
             UpdateIcon(idle ? 1 : countdown.Fraction, state, face.Tone);
         }
@@ -698,9 +672,9 @@ namespace SleepTimer
             ticker.Stop(); countdown.Reset(); ApplyAwake(); executing = true;
             face.Interactive = false; face.State = TimerState.Idle; face.Tone = TimerTone.Idle; face.Snap(0);
             face.Title = action.FinalTitle; face.Time = "00:00"; face.Sub = action.FinalSub; face.InvalidateVisual();
+            Title = "00:00 · " + action.FinalSub.TrimEnd('.');
             picker.IsEnabled = mode.IsEnabled = false;
             tray.Text = "Sleep Timer - " + action.FinalSub.ToLowerInvariant();
-            Title = "00:00 · " + action.FinalSub.TrimEnd('.'); status.Text = Title;
             bool force = forceSwitch.IsChecked == true;
             if (action.Key == "sleep")
             {
@@ -733,13 +707,13 @@ namespace SleepTimer
         bool ConfirmQuit()
         {
             ShowWindow();
-            var dialog = new Window { Owner = this, Title = "Cancel timer?", Width = Design.PageWidth, SizeToContent = SizeToContent.Height, ResizeMode = ResizeMode.NoResize,
+            var dialog = new Window { Owner = this, Title = "Cancel timer?", Width = 360, Height = 185, ResizeMode = ResizeMode.NoResize,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = Theme.Brush(Theme.Bg), ShowInTaskbar = false };
-            var panel = new StackPanel { Margin = new Thickness(Design.DialogEdge) };
-            panel.Children.Add(Label("Quit and cancel the active timer?", Design.Title));
-            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, Design.PageEdge, 0, 0) };
-            var stay = new Button { Content = "Keep timer", MinWidth = Design.DialogButtonMin, Margin = new Thickness(0, 0, Design.Gap, 0), IsCancel = true };
-            var quit = new Button { Content = "Quit", IsDefault = true, Style = (Style)FindResource("DangerButton"), MinWidth = Design.DialogButtonMin };
+            var panel = new StackPanel { Margin = new Thickness(20) };
+            panel.Children.Add(Label("Quit and cancel the active timer?", 16));
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 28, 0, 0) };
+            var stay = new Button { Content = "Keep timer", Margin = new Thickness(0, 0, 8, 0), IsCancel = true };
+            var quit = new Button { Content = "Quit", IsDefault = true };
             stay.Click += (s, e) => dialog.DialogResult = false; quit.Click += (s, e) => dialog.DialogResult = true;
             buttons.Children.Add(stay); buttons.Children.Add(quit); panel.Children.Add(buttons); dialog.Content = panel;
             dialog.SourceInitialized += (s, e) => Native.DarkTitlebar(new WindowInteropHelper(dialog).Handle);
@@ -764,7 +738,7 @@ namespace SleepTimer
             ticker.Stop(); aborted?.Stop();
             source?.RemoveHook(WindowMessage);
             face.Snap(0);
-            trayMenu.Dispose(); awakeMenu.Dispose(); actionMenu.Dispose(); customMenu.Dispose(); colorPicker?.Close();
+            trayMenu.Dispose(); awakeMenu.Dispose(); customMenu.Dispose(); colorPicker?.Close();
             tray.Visible = false; tray.Icon?.Dispose(); tray.Dispose();
             if (trayHandle != IntPtr.Zero) { Native.DestroyIcon(trayHandle); trayHandle = IntPtr.Zero; }
             Native.KeepAwake(false, false);
