@@ -213,10 +213,15 @@ namespace SleepTimer
     /// <summary>WPF animation-clock-driven vector dial. No 16 ms WinForms repaint timer.</summary>
     sealed class TimerFace : FrameworkElement
     {
-        public const int EditMilliseconds = 600;
+        public const int EditMilliseconds = AnimationTiming.DefaultMilliseconds;
+        public int CircleMilliseconds { get; set; } = EditMilliseconds;
+        public int CounterMilliseconds { get; set; } = EditMilliseconds;
         public static readonly DependencyProperty PositionProperty = DependencyProperty.Register(
             "Position", typeof(double), typeof(TimerFace), new FrameworkPropertyMetadata(1800d, FrameworkPropertyMetadataOptions.AffectsRender));
         public double Position { get => (double)GetValue(PositionProperty); set => SetValue(PositionProperty, value); }
+        public static readonly DependencyProperty CounterPositionProperty = DependencyProperty.Register(
+            "CounterPosition", typeof(double), typeof(TimerFace), new FrameworkPropertyMetadata(1800d, FrameworkPropertyMetadataOptions.AffectsRender));
+        public double CounterPosition { get => (double)GetValue(CounterPositionProperty); set => SetValue(CounterPositionProperty, value); }
         public TimerState State;
         public TimerTone Tone;
         public bool ClockMode, Interactive = true;
@@ -259,45 +264,55 @@ namespace SleepTimer
         public void UpdatePosition(double seconds, bool animate, bool running)
         {
             seconds = Math.Max(0, Math.Min(Countdown.MaxSet, seconds));
+            int circle = AnimationTiming.Normalize(CircleMilliseconds), counter = AnimationTiming.Normalize(CounterMilliseconds);
             if (animate && IsVisible)
             {
                 edit.Restart();
-                Animate(seconds, EditMilliseconds, true);
+                Animate(PositionProperty, seconds, circle, true);
+                Animate(CounterPositionProperty, seconds, counter, true);
             }
-            else if (edit.IsRunning && edit.ElapsedMilliseconds < EditMilliseconds && IsVisible)
+            else
             {
-                // A 100 ms status refresh must not interrupt an edit animation.
-            }
-            else if (running && IsVisible)
-            {
-                edit.Reset();
-                Animate(seconds, 100, false);
-            }
-            else if (seconds != target || !IsVisible)
-            {
-                edit.Reset();
-                BeginAnimation(PositionProperty, null); Position = seconds;
+                bool holdingCircle = IsVisible && edit.IsRunning && edit.ElapsedMilliseconds < circle;
+                bool holdingCounter = IsVisible && edit.IsRunning && edit.ElapsedMilliseconds < counter;
+                // Each animation has its own clock duration; status refreshes must not interrupt either.
+                if (!holdingCircle)
+                {
+                    if (running && IsVisible) Animate(PositionProperty, seconds, 100, false);
+                    else if (seconds != target || !IsVisible) SetPosition(PositionProperty, seconds);
+                }
+                if (!holdingCounter)
+                {
+                    if (seconds != target || !IsVisible || edit.IsRunning) SetPosition(CounterPositionProperty, seconds);
+                }
+                if (!holdingCircle && !holdingCounter) edit.Reset();
             }
             target = seconds;
             InvalidateVisual();
         }
 
-        void Animate(double seconds, int milliseconds, bool eased)
+        void Animate(DependencyProperty property, double seconds, int milliseconds, bool eased)
         {
-            double from = Position;
+            if (milliseconds == 0) { SetPosition(property, seconds); return; }
+            double from = (double)GetValue(property);
             var motion = new DoubleAnimation(from, seconds, TimeSpan.FromMilliseconds(milliseconds));
             if (eased) motion.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
-            BeginAnimation(PositionProperty, motion, HandoffBehavior.SnapshotAndReplace);
+            BeginAnimation(property, motion, HandoffBehavior.SnapshotAndReplace);
         }
-
+        void SetPosition(DependencyProperty property, double seconds)
+        {
+            BeginAnimation(property, null); SetValue(property, seconds);
+        }
         public void Snap(double seconds)
         {
             edit.Reset(); target = seconds;
-            BeginAnimation(PositionProperty, null); Position = seconds; InvalidateVisual();
+            SetPosition(PositionProperty, seconds); SetPosition(CounterPositionProperty, seconds);
+            InvalidateVisual();
         }
 
-        public string DisplayTime => !ClockMode && edit.IsRunning && edit.ElapsedMilliseconds < EditMilliseconds
-            ? TimeText.Clock(Math.Round(Position / 60) * 60) : Time;
+        public string DisplayTime => !ClockMode && edit.IsRunning
+            && edit.ElapsedMilliseconds < AnimationTiming.Normalize(CounterMilliseconds)
+            ? TimeText.Clock(Math.Round(CounterPosition / 60) * 60) : Time;
 
         protected override void OnRender(DrawingContext g)
         {

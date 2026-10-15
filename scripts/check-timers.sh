@@ -13,6 +13,7 @@ cat > "$check_dir/Checks.csproj" <<'PROJECT'
     <Compile Include="$(SleepTimerRoot)/src/QuickTimers.cs" />
     <Compile Include="$(SleepTimerRoot)/src/SwitchGeometry.cs" />
     <Compile Include="$(SleepTimerRoot)/src/WheelInput.cs" />
+    <Compile Include="$(SleepTimerRoot)/src/AnimationTiming.cs" />
   </ItemGroup>
 </Project>
 PROJECT
@@ -133,6 +134,14 @@ class Checks
         Equal(TimerDial.ArcFraction(3570), 3570d / 3600, "backward animation wraps through top");
         Equal(TimerDial.ArcFraction(10830), 30d / 3600, "later revolutions wrap identically");
         Equal(TimerDial.ArcFraction(0), 0, "expired animated arc is empty");
+        Equal(AnimationTiming.Normalize(600), 600, "default animation duration");
+        Equal(AnimationTiming.Normalize(0), 0, "instant animation supported");
+        Equal(AnimationTiming.Normalize(-1), 600, "invalid persisted duration falls back");
+        Equal(AnimationTiming.Normalize(10001), 600, "oversized persisted duration falls back");
+        foreach (string invalid in new[] { "", "-1", "1.5", "10001", "fast", "999999999999" })
+        { if (AnimationTiming.TryParse(invalid, out _)) throw new Exception("invalid animation duration accepted"); checks++; }
+        foreach (string valid in new[] { "0", "120", "600", "10000" })
+        { if (!AnimationTiming.TryParse(valid, out _)) throw new Exception("valid animation duration rejected"); checks++; }
         var stop = new HourStop();
         Equal(stop.Adjust(3300, 900, 0), 300, "coarse wheel snaps to first hour");
         Equal(stop.Adjust(3600, 300, 399), 0, "hour hold lasts 400 ms");

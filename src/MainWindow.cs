@@ -38,6 +38,9 @@ namespace SleepTimer
         readonly ToggleButton startupSwitch = new ToggleButton { IsChecked = Settings.Get("start_with_windows", false) };
         readonly ToggleButton forceSwitch = new ToggleButton { IsChecked = Settings.Get("force", true) };
         readonly TextBox accentField = new TextBox { MaxLength = 7, Width = 90 };
+        readonly TextBox circleDuration = new TextBox { MaxLength = 5, TextAlignment = TextAlignment.Right };
+        readonly TextBox counterDuration = new TextBox { MaxLength = 5, TextAlignment = TextAlignment.Right };
+        readonly TextBlock animationNote = new TextBlock { FontSize = 12, Foreground = Theme.Brush(Theme.Faint) };
         readonly TextBlock accentNote = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
         readonly TextBox quickMinutes = new TextBox { MaxLength = 4, Width = 184, Tag = "Minutes", ToolTip = "Whole minutes from 1 to 1440" };
         readonly TextBlock quickNote = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
@@ -64,6 +67,8 @@ namespace SleepTimer
         public MainWindow()
         {
             countdown = new Countdown(Settings.Get("duration", Countdown.DefaultSeconds), () => clock.Elapsed.TotalSeconds);
+            face.CircleMilliseconds = AnimationTiming.Normalize(Settings.Get("circle_sweep_ms", AnimationTiming.DefaultMilliseconds));
+            face.CounterMilliseconds = AnimationTiming.Normalize(Settings.Get("counter_sweep_ms", AnimationTiming.DefaultMilliseconds));
             clockMode = Settings.Get("clock_mode", false);
             clockMinute = TimeText.DefaultClock(DateTime.Now, countdown.Duration);
             action = PowerAction.Find(Settings.Get("action", "shutdown"));
@@ -242,6 +247,12 @@ namespace SleepTimer
                 if (!hex.StartsWith("#")) hex = "#" + hex;
                 if (System.Text.RegularExpressions.Regex.IsMatch(hex, "^#[0-9A-Fa-f]{6}$")) ApplyAccent(Theme.Hex(hex), true);
             };
+            var animationCard = (Canvas)Card(1, 264, 160).Child;
+            Place(animationCard, Label("Animation duration"), 20, 12, 280, 24);
+            AddAnimationInput(animationCard, "Circle sweep", circleDuration, 44, true);
+            AddAnimationInput(animationCard, "Numerical counter", counterDuration, 84, false);
+            animationNote.Text = "Enter to save · smaller = faster · 0 = instant";
+            Place(animationCard, animationNote, 20, 132, 280, 18);
             var timerCard = (Canvas)Card(2, 88, 224).Child;
             Place(timerCard, Label("Quick timers"), 16, 16, 288, 24);
             Place(timerCard, Label("Start from the tray using the selected action.", 12, true), 16, 48, 288, 20);
@@ -264,6 +275,42 @@ namespace SleepTimer
             }), customChip);
             SelectTab(0); RefreshQuickTimers(); AccentNote(); AddFooter(settings);
         }
+        void AddAnimationInput(Canvas card, string label, TextBox input, double y, bool circle)
+        {
+            Place(card, Label(label), 20, y, 168, 32);
+            input.Text = (circle ? face.CircleMilliseconds : face.CounterMilliseconds).ToString(CultureInfo.InvariantCulture);
+            input.ToolTip = "0–10000 milliseconds. Default: 600 ms. Press Enter or leave the field to save.";
+            Place(card, input, 196, y, 80, 32);
+            Place(card, Label("ms", 12, true), 284, y, 24, 32);
+            input.LostKeyboardFocus += (s, e) => CommitAnimationInput(input, circle);
+            input.KeyDown += (s, e) =>
+            {
+                if (e.Key == Key.Enter) { CommitAnimationInput(input, circle); e.Handled = true; }
+                else if (e.Key == Key.Escape)
+                {
+                    input.Text = (circle ? face.CircleMilliseconds : face.CounterMilliseconds).ToString(CultureInfo.InvariantCulture);
+                    CommitAnimationInput(input, circle); e.Handled = true;
+                }
+            };
+        }
+        void CommitAnimationInput(TextBox input, bool circle)
+        {
+            if (!AnimationTiming.TryParse(input.Text.Trim(), out int milliseconds))
+            {
+                input.BorderBrush = Theme.Brush(Theme.Danger);
+                animationNote.Text = "Use a whole number from 0 to 10000 ms.";
+                animationNote.Foreground = Theme.Brush(Theme.Danger);
+                return;
+            }
+            if (circle) face.CircleMilliseconds = milliseconds;
+            else face.CounterMilliseconds = milliseconds;
+            Settings.Set(circle ? "circle_sweep_ms" : "counter_sweep_ms", milliseconds);
+            input.Text = milliseconds.ToString(CultureInfo.InvariantCulture);
+            input.SetResourceReference(TextBox.BorderBrushProperty, "BorderBrush");
+            animationNote.Text = "Enter to save · smaller = faster · 0 = instant";
+            animationNote.Foreground = Theme.Brush(Theme.Faint);
+        }
+
         static void SwitchRow(Canvas parent, string title, string note, ToggleButton toggle, double y)
         {
             TextBlock label = Label(title), detail = Label(note, 12, true);

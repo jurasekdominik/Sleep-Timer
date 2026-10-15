@@ -74,6 +74,7 @@ namespace SleepTimer
                 {
                     Settings.Set("start_with_windows", false); Settings.Set("awake", false);
                     Settings.Set("clock_mode", false); Settings.Set("duration", 1800);
+                    Settings.Set("circle_sweep_ms", 600); Settings.Set("counter_sweep_ms", 600);
                     var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                     Theme.Init(app);
                     var window = Open();
@@ -92,7 +93,7 @@ namespace SleepTimer
                         Call(window, "AddTime", 1800); Check(countdown.Duration == 5400, "Hour hold did not expire");
                         Pump(100);
                         Check(face.Position > 3600 && face.Position < 5400, "Dial edit animation has no intermediate progress");
-                        Check(face.DisplayTime == TimeText.Clock(Math.Round(face.Position / 60) * 60), "Counter does not follow minute increments");
+                        Check(face.DisplayTime == TimeText.Clock(Math.Round(face.CounterPosition / 60) * 60), "Counter does not follow minute increments");
                         Pump(650);
                         Check(Math.Abs(face.Position - 5400) < 1, "Dial did not reach target");
                         face.UpdatePosition(3600, false, false);
@@ -102,6 +103,44 @@ namespace SleepTimer
                         face.UpdatePosition(3360, true, false);
                         Pump(80); Check(face.Position >= 3360 && face.Position <= 3660, "Backward rollover reversed");
                         Pump(650);
+
+                        var circleInput = Field<TextBox>(window, "circleDuration");
+                        var textInput = Field<TextBox>(window, "counterDuration");
+                        Check(circleInput.Text == "600" && textInput.Text == "600", "Animation defaults changed");
+                        circleInput.Text = "120"; Call(window, "CommitAnimationInput", circleInput, true);
+                        textInput.Text = "900"; Call(window, "CommitAnimationInput", textInput, false);
+                        Check(Settings.Get("circle_sweep_ms", -1) == 120 && Settings.Get("counter_sweep_ms", -1) == 900, "Independent timings were not saved");
+                        var reopened = Open();
+                        try
+                        {
+                            var reloaded = Field<TimerFace>(reopened, "face");
+                            Check(reloaded.CircleMilliseconds == 120 && reloaded.CounterMilliseconds == 900, "Timing overrides did not survive reopen");
+                        }
+                        finally { Close(reopened); }
+                        window.Activate();
+                        face.Snap(1800); face.Time = TimeText.Clock(3600);
+                        face.UpdatePosition(3600, true, false); Pump(250);
+                        Check(Math.Abs(face.Position - 3600) < 1, "Fast circle did not complete");
+                        Check(face.CounterPosition > 1800 && face.CounterPosition < 3600 && face.DisplayTime != face.Time, "Slow text followed the fast circle");
+                        face.UpdatePosition(3600, false, false); Pump(750);
+                        Check(Math.Abs(face.CounterPosition - 3600) < 1, "Status refresh interrupted independent text animation");
+                        circleInput.Text = "900"; Call(window, "CommitAnimationInput", circleInput, true);
+                        textInput.Text = "120"; Call(window, "CommitAnimationInput", textInput, false);
+                        face.Snap(1800); face.UpdatePosition(3600, true, false); Pump(250);
+                        Check(face.Position > 1800 && face.Position < 3600, "Slow circle followed the fast text");
+                        Check(Math.Abs(face.CounterPosition - 3600) < 1 && face.DisplayTime == face.Time, "Fast counter did not complete independently");
+                        Pump(750);
+                        foreach (string bad in new[] { "-1", "1.5", "10001", "bad", "" })
+                        {
+                            circleInput.Text = bad; Call(window, "CommitAnimationInput", circleInput, true);
+                            Check(face.CircleMilliseconds == 900 && Settings.Get("circle_sweep_ms", -1) == 900, "Invalid edit replaced the saved timing");
+                        }
+                        circleInput.Text = "0"; Call(window, "CommitAnimationInput", circleInput, true);
+                        textInput.Text = "0"; Call(window, "CommitAnimationInput", textInput, false);
+                        face.Snap(1800); face.UpdatePosition(3600, true, false);
+                        Check(face.Position == 3600 && face.CounterPosition == 3600, "Zero duration did not apply instantly");
+                        circleInput.Text = "600"; Call(window, "CommitAnimationInput", circleInput, true);
+                        textInput.Text = "600"; Call(window, "CommitAnimationInput", textInput, false);
 
                         Call(window, "SetMode", true);
                         Check(Field<bool>(window, "clockMode"), "At time mode failed");
