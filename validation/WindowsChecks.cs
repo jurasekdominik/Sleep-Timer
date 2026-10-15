@@ -64,6 +64,22 @@ namespace SleepTimer
             using (var file = File.Create(path)) png.Save(file);
             Console.WriteLine("PREVIEW:" + name + ":" + Convert.ToBase64String(File.ReadAllBytes(path)));
         }
+
+        static void WheelAt(MainWindow window, TimerFace face, System.Windows.Point local)
+        {
+            var previous = System.Windows.Forms.Cursor.Position;
+            try
+            {
+                var at = face.PointToScreen(local);
+                System.Windows.Forms.Cursor.Position = new System.Drawing.Point((int)at.X, (int)at.Y);
+                window.Activate(); Pump(30);
+                SendMessage(new WindowInteropHelper(window).Handle, 0x020A, (IntPtr)(120 << 16),
+                    (IntPtr)(((int)at.Y << 16) | ((int)at.X & 0xFFFF)));
+                Pump(80);
+            }
+            finally { System.Windows.Forms.Cursor.Position = previous; }
+        }
+
         [STAThread] static int Main()
         {
             // Preserve the caller's settings. No expiry polling or power action runs in this suite.
@@ -82,6 +98,11 @@ namespace SleepTimer
                     {
                         var countdown = Field<Countdown>(window, "countdown");
                         var face = Field<TimerFace>(window, "face");
+                        WheelAt(window, face, new System.Windows.Point(90, 180));
+                        Check(countdown.Duration == 2100, "Wheel over blank dial interior did not adjust time");
+                        WheelAt(window, face, new System.Windows.Point(160, 186));
+                        Check(countdown.Duration == 2400, "Wheel over the action selector did not adjust time");
+                        countdown.SetDuration(1800); Call(window, "UpdateView", false);
                         Call(window, "SetAction", "sleep");
                         var force = Field<ToggleButton>(window, "forceSwitch");
                         Check(force.IsEnabled, "Force-close setting cannot be switched off while Sleep is selected");
