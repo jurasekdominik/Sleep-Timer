@@ -2,7 +2,7 @@ name: Validate
 on:
   push:
     branches: [main, WPF]
-    tags: [v1.0]
+    tags: [v1.1]
     paths-ignore: ['assets/screenshot*.png', 'README.md']
   pull_request:
   workflow_dispatch:
@@ -24,6 +24,7 @@ jobs:
       - if: github.ref != 'refs/heads/WPF' && github.head_ref != 'WPF'
         run: dotnet build SleepTimer.csproj -c Release --nologo -warnaserror
   windows:
+    needs: logic
     runs-on: windows-latest
     permissions:
       contents: write
@@ -56,20 +57,12 @@ jobs:
           path: |
             bin/Release/net48/SleepTimer.exe
             validation-output/
-      - name: Update 1.0 release
-        if: github.event_name == 'push' && github.ref == 'refs/tags/v1.0'
+      - name: Prepare 1.1 draft release
+        if: github.event_name == 'push' && github.ref == 'refs/tags/v1.1'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
-          "A Windows timer for shutdown, sleep and restart, with quick presets and keep-awake options.`n`nRequires Windows 10/11 and .NET Framework 4.8. Download SleepTimer.exe and run it." | Set-Content $notes -Encoding utf8
-          gh release view v1.0 --repo '${{ github.repository }}' *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release edit v1.0 --repo '${{ github.repository }}' --title 'Sleep Timer 1.0' --notes-file $notes --latest
-          } else {
-            gh release create v1.0 --repo '${{ github.repository }}' --verify-tag --title 'Sleep Timer 1.0' --notes-file $notes --latest
-          }
-          if ($LASTEXITCODE -ne 0) { throw 'Release creation or update failed' }
-          gh release upload v1.0 bin/Release/net48/SleepTimer.exe --repo '${{ github.repository }}' --clobber
-          if ($LASTEXITCODE -ne 0) { throw 'Release executable upload failed' }
+          # Publication remains manual after user testing and notes approval.
+          gh release create v1.1 bin/Release/net48/SleepTimer.exe --repo '${{ github.repository }}' --verify-tag --draft --title 'Sleep Timer 1.1' --notes-file docs/CHANGELOG-1.1-DRAFT.md
+          if ($LASTEXITCODE -ne 0) { throw 'Draft release creation failed' }

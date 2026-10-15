@@ -126,7 +126,7 @@ namespace SleepTimer
         public static bool Get(string name, bool fallback)
         {
             string v = Read(name);
-            return v == null ? fallback : v.Equals("true", StringComparison.OrdinalIgnoreCase);
+            return v == null ? fallback : v == "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase);
         }
 
         public static int Get(string name, int fallback) => int.TryParse(Read(name), out int v) ? v : fallback;
@@ -172,24 +172,18 @@ namespace SleepTimer
 
         public static bool Claim()
         {
+            // Publish the activation event before the instance marker. A concurrent
+            // second launch can then signal it even before Listen starts.
+            show = new EventWaitHandle(false, EventResetMode.AutoReset, EventName);
             mutex = new Mutex(false, MutexName, out bool created);
-            if (created)
-            {
-                // Created right away, so a second launch while this one is still starting up is not lost.
-                show = new EventWaitHandle(false, EventResetMode.AutoReset, EventName);
-                return true;
-            }
+            if (created) return true;
             try
             {
-                using (var running = EventWaitHandle.OpenExisting(EventName))
-                {
-                    // This process was just started by the user, so it may take the foreground;
-                    // hand that right to the running instance so its window can come to the front.
-                    Native.AllowSetForegroundWindow(-1);
-                    running.Set();
-                }
+                Native.AllowSetForegroundWindow(-1);
+                show.Set();
             }
             catch { }
+            show.Dispose(); mutex.Dispose();
             return false;
         }
 

@@ -7,8 +7,8 @@ using System.Windows;
 [assembly: AssemblyProduct("Sleep Timer")]
 [assembly: AssemblyDescription("Sleep Timer - WPF edition")]
 [assembly: AssemblyCopyright("Dominik Jurásek")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
 
 namespace SleepTimer
 {

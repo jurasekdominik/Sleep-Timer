@@ -182,6 +182,8 @@ namespace SleepTimer
                     Settings.Set("timer_font_weight", 400); Settings.Set("ui_font_weight", 400);
                     Settings.Set("hotkey_toggle_key", 0); Settings.Set("hotkey_toggle_modifiers", 0);
                     Settings.Set("hotkey_quick_key", 0); Settings.Set("hotkey_quick_modifiers", 0);
+                    Settings.Set("validation_bool", 1); Check(Settings.Get("validation_bool", false), "DWORD true setting was ignored");
+                    Settings.Set("validation_bool", 0); Check(!Settings.Get("validation_bool", true), "DWORD false setting was ignored");
                     var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                     Theme.Init(app);
                     var window = Open();
@@ -285,6 +287,17 @@ namespace SleepTimer
                     {
                         var countdown = Field<Countdown>(visual, "countdown");
                         countdown.SetDuration(10800); Call(visual, "UpdateView", false); Pump(150);
+                        var idleIcon = visual.Icon;
+                        countdown.Start(10800); countdown.Adjust(-5400); countdown.Pause();
+                        Call(visual, "UpdateView", false); Pump(50);
+                        Check(Field<string>(visual, "iconKey").EndsWith("|24"), "Taskbar/tray progress does not use half of the total three-hour countdown");
+                        Check(visual.Icon != idleIcon && visual.Icon.IsFrozen, "Taskbar icon was not updated with a copied progress bitmap");
+                        Check(visual.Title.Contains("Paused"), "Visible window title does not show timer state");
+                        visual.Hide(); Call(visual, "UpdateView", false);
+                        Check(visual.Title == Field<TimerFace>(visual, "face").Time, "Hidden thumbnail title is not compact");
+                        visual.Show(); countdown.Reset(); Call(visual, "UpdateView", false); Pump(50);
+                        Check(visual.Title.Contains("Ready"), "Ready state missing from visible title");
+                        Check(Program.Version == "1.1", "Release version is not 1.1");
                         Check(((FrameworkElement)visual.Content).ActualHeight >= 508, "Client area clips the footer");
                         Console.WriteLine("CHECK: font families and weights");
                         Check(AppFonts.All.Length >= 6 && AppFonts.All.Select(font => font.Key).Distinct().Count() == AppFonts.All.Length,
@@ -344,7 +357,7 @@ namespace SleepTimer
                             "UI weight does not reload from settings");
                         Call(visual, "ApplyFontWeight", 400, true); Pump(50);
                         Call(visual, "OpenFontGallery", true); Pump(100);
-                        Check(Field<Window>(visual, "fontGallery").Title == "UI font", "UI gallery opened with the wrong target");
+                        Check(((FontWindow)Field<Window>(visual, "fontGallery")).IsUi, "UI gallery opened with the wrong target");
                         CaptureControl((FrameworkElement)Field<Window>(visual, "fontGallery").Content, "wpf-ui-font-gallery");
                         Field<Window>(visual, "fontGallery").Close();
                         Capture(visual, "wpf-main");
@@ -364,10 +377,19 @@ namespace SleepTimer
                         Call(selector, "SetOpen", false); Pump(300);
                         Call(visual, "ToggleSettings"); Pump(300);
                         Check(Field<Button>(visual, "fontButton").Visibility == Visibility.Visible, "Font icon missing in settings");
-                        Call(visual, "ShowFontMenu"); Pump(100);
-                        var fontMenu = Field<PopupMenu>(visual, "fontMenu");
-                        Check(Field<StackPanel>(fontMenu, "items").Children.OfType<Button>().Count() == 2, "Font menu must offer Timer and UI");
-                        CaptureControl((FrameworkElement)Field<Popup>(fontMenu, "popup").Child, "wpf-font-menu"); fontMenu.Close();
+                        Field<Button>(visual, "fontButton").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)); Pump(100);
+                        var fonts = (FontWindow)Field<Window>(visual, "fontGallery");
+                        Check(fonts.IsVisible && !fonts.IsUi, "Font button did not open the font window directly");
+                        Field<Button>(fonts, "uiTab").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                        Check(fonts.IsUi, "UI submenu did not switch inside the font window");
+                        Field<Button>(fonts, "timerTab").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                        Check(!fonts.IsUi, "Timer submenu did not switch inside the font window");
+                        var fontChoice = Field<System.Collections.Generic.List<Button>>(fonts, "choices").Last();
+                        var pickedFont = (AppFont)fontChoice.Tag;
+                        fontChoice.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
+                            { RoutedEvent = Control.MouseDoubleClickEvent });
+                        Check(!fonts.IsVisible && AppFonts.Timer.Key == pickedFont.Key, "Double-click did not select the font and close the window");
+                        Call(visual, "ApplyFont", "segoe", false); Call(visual, "ApplyFontWeight", 400, false);
                         var toggle = Field<ToggleButton>(visual, "forceSwitch");
                         var thumb = (Border)toggle.Template.FindName("thumb", toggle);
                         Check(((SolidColorBrush)thumb.Background).Color == Colors.White && thumb.Width == 28 && thumb.Height == 20, "Original switch capsule was changed");

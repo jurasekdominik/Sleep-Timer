@@ -14,7 +14,7 @@ Requires Windows 10/11 with .NET Framework 4.8 (included on current Windows vers
 - Close or minimize to hide in the tray. Double-click the tray icon to reopen.
 - Custom timers accept whole minutes (`90`) or whole hours (`2h`, `5h`), up to 24 hours.
 - At-time scheduling respects daylight-saving changes. Skipped times move to the first valid minute; repeated times use the next future occurrence.
-- In Settings, the **Aa** icon beside the gear opens **Timer font** and **UI font**. Each selection is independent and defaults to Segoe UI Regular. Choose a family and then an installed weight (such as Light, Regular or Bold). UI choices favor readable families; Bahnschrift and monospaced choices are reserved for timer digits. Aptos appears when installed. No fonts are downloaded or bundled; missing saved fonts fall back to Segoe UI.
+- In Settings, the **Aa** icon beside the gear opens one font window with **Timer** and **UI** tabs. Single-click a family to preview; double-click to select and close. Each selection is independent and defaults to Segoe UI Regular. Choose a family and then an installed weight (such as Light, Regular or Bold). UI choices favor readable families; Bahnschrift and monospaced choices are reserved for timer digits. Aptos appears when installed. No fonts are downloaded or bundled; missing saved fonts fall back to Segoe UI.
 - Settings → **Keybinds** offers global **Start / Cancel** and **Start last used quick timer** shortcuts. Both start unbound. Click a field and press a combination with Ctrl, Alt or Win; Delete clears it. Shortcut actions show a Windows notification (subject to Windows notification settings). With no previous quick timer, the quick shortcut starts 30 minutes.
 - Tray quick-action changes apply to the next quick timer without changing an active countdown.
 
@@ -23,6 +23,8 @@ Requires Windows 10/11 with .NET Framework 4.8 (included on current Windows vers
 Install .NET SDK 8 on Windows and run `build.cmd`.
 Run `bash scripts/check-timers.sh` for portable logic checks and `powershell -File scripts/check-windows.ps1` for WPF UI checks.
 
-The WPF branch's Validate workflow publishes **SleepTimer-WPF** with the standalone executable, executable size and rendered UI previews. It does not replace the stable release or merge into main.
+The WPF branch's Validate workflow uploads **SleepTimer-WPF** with the standalone executable, executable size and rendered UI previews. It does not replace the stable release or merge into main.
 
 WPF animation clocks drive the vector dial, controls and transitions without a fixed 60 Hz UI timer. Actual refresh behavior depends on Windows' compositor, GPU, display setup and workload; automated UI checks cannot certify the feel of a physical 144 Hz monitor.
+
+Version 1.1 is being prepared for testing. Release notes and the new showcase screenshot are pending review. A `v1.1` tag prepares a draft release after both validation jobs pass; publication remains manual.
