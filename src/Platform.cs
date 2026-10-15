@@ -11,18 +11,15 @@ namespace SleepTimer
     {
         [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
         [DllImport("kernel32.dll")] static extern uint SetThreadExecutionState(uint flags);
-        [DllImport("powrprof.dll", SetLastError = true)] static extern bool SetSuspendState(bool hibernate, bool force, bool disableWakeEvents);
+        [DllImport("powrprof.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.U1)]
+        static extern bool SetSuspendState([MarshalAs(UnmanagedType.U1)] bool hibernate,
+            [MarshalAs(UnmanagedType.U1)] bool force, [MarshalAs(UnmanagedType.U1)] bool disableWakeEvents);
         [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(int processId);
         [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
         [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr handle);
         [DllImport("kernel32.dll")] public static extern bool SetDllDirectory(string path);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, string l);
-        [DllImport("winmm.dll")] static extern uint timeBeginPeriod(uint ms);
-        [DllImport("winmm.dll")] static extern uint timeEndPeriod(uint ms);
-
-        /// <summary>1 ms timer resolution while an animation runs (default ~16 ms). Calls must pair up.</summary>
-        public static void HiResTimer(bool on) { try { if (on) timeBeginPeriod(1); else timeEndPeriod(1); } catch { } }
-
         public static void DarkTitlebar(IntPtr hwnd)
         {
             try { int on = 1; DwmSetWindowAttribute(hwnd, 20, ref on, 4); } catch { }
@@ -37,19 +34,25 @@ namespace SleepTimer
         }
 
         /// <summary>Real sleep, not hibernate. Blocks until the PC wakes up again.</summary>
-        public static void Sleep(bool force)
+        public static void Sleep()
         {
-            if (!SetSuspendState(false, force, false)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            if (!SetSuspendState(false, false, false)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
         }
 
         public static void Shutdown(bool restart, bool force)
         {
-            string args = (restart ? "/r" : "/s") + (force ? " /f" : "") + " /t 0";
+            string args = PowerAction.ShutdownArguments(restart, force);
             using (var process = Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "shutdown.exe"), args)
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
-            })) { }
+            }))
+            {
+                if (process == null) throw new InvalidOperationException("Windows did not start shutdown.exe.");
+                process.WaitForExit();
+                if (process.ExitCode != 0)
+                    throw new System.ComponentModel.Win32Exception(process.ExitCode);
+            }
         }
 
         public static void OpenUrl(string url)

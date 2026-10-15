@@ -1,9 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Drawing;
 using System.Linq;
-using System.Threading;
 
 namespace SleepTimer
 {
@@ -20,6 +15,9 @@ namespace SleepTimer
             new PowerAction { Key = "restart", Label = "Restart", Verb = "restart", Would = "Would restart at", At = "Restart at",
                               RunTitle = "RESTARTING IN", ClockTitle = "RESTART AT", FinalTitle = "SEE YOU SOON", FinalSub = "Restarting..." },
         };
+
+        public static string ShutdownArguments(bool restart, bool force) =>
+            (restart ? "/r" : "/s") + (force ? " /f" : "") + " /t 0";
 
         public static PowerAction Find(string key) => All.FirstOrDefault(a => a.Key == key) ?? All[0];
     }

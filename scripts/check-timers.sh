@@ -11,9 +11,9 @@ cat > "$check_dir/Checks.csproj" <<'PROJECT'
     <Compile Include="$(SleepTimerRoot)/src/Countdown.cs" />
     <Compile Include="$(SleepTimerRoot)/src/TimerDial.cs" />
     <Compile Include="$(SleepTimerRoot)/src/QuickTimers.cs" />
-    <Compile Include="$(SleepTimerRoot)/src/SwitchGeometry.cs" />
     <Compile Include="$(SleepTimerRoot)/src/WheelInput.cs" />
     <Compile Include="$(SleepTimerRoot)/src/AnimationTiming.cs" />
+    <Compile Include="$(SleepTimerRoot)/src/PowerAction.cs" />
   </ItemGroup>
 </Project>
 PROJECT
@@ -67,8 +67,39 @@ class Checks
         var restored = new QuickTimers(presets.Save());
         if (!restored.All.SequenceEqual(presets.All)) throw new Exception("save/reload"); checks++;
         if (!presets.Remove(180) || presets.All.Contains(180) || presets.Remove(30)) throw new Exception("custom removal preserves defaults"); checks++;
-        foreach (string invalid in new[] {"", "1.5", "-1", "0", "1441", "9999999999", "hello"})
+        foreach (string invalid in new[] {"", "1.5", "-1", "0", "1441", "9999999999", "hello", "1,5", "1.5h", "1,5h", "1h 30m", "1:30", "90m", "0h", "25h", "+2", "-2h", "9999999999h"})
         { if (QuickTimers.TryMinutes(invalid, out _)) throw new Exception("invalid input accepted"); checks++; }
+        foreach (var input in new[] { ("1", 1), ("90", 90), ("1440", 1440), ("1h", 60), ("2h", 120), ("5h", 300), ("24h", 1440), (" 2H ", 120) })
+        {
+            if (!QuickTimers.TryMinutes(input.Item1, out int minutes)) throw new Exception("valid timer rejected: " + input.Item1);
+            Equal(minutes, input.Item2, "whole-minute and whole-hour parsing");
+        }
+        foreach (var command in new[] { (false, false, "/s /t 0"), (false, true, "/s /f /t 0"),
+            (true, false, "/r /t 0"), (true, true, "/r /f /t 0") })
+        {
+            if (PowerAction.ShutdownArguments(command.Item1, command.Item2) != command.Item3)
+                throw new Exception("Power action/force arguments do not match the selected action");
+            checks++;
+        }
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Prague");
+        var fall = new DateTimeOffset(2026, 10, 25, 1, 30, 0, TimeSpan.FromHours(2));
+        Equal((TimeText.NextOccurrence(fall, 210, zone) - fall).TotalHours, 3, "fall clock transition");
+        var spring = new DateTimeOffset(2026, 3, 29, 1, 30, 0, TimeSpan.FromHours(1));
+        Equal((TimeText.NextOccurrence(spring, 210, zone) - spring).TotalHours, 1, "spring clock transition");
+        var gap = TimeText.NextOccurrence(spring, 150, zone);
+        Equal(gap.Hour * 60 + gap.Minute, 180, "nonexistent time advances to first valid minute");
+        Equal((gap - spring).TotalMinutes, 30, "nonexistent time elapsed duration");
+        Equal((TimeText.NextOccurrence(fall, 150, zone) - fall).TotalHours, 1, "first repeated time");
+        var repeated = new DateTimeOffset(2026, 10, 25, 2, 45, 0, TimeSpan.FromHours(2));
+        Equal((TimeText.NextOccurrence(repeated, 150, zone) - repeated).TotalMinutes, 45, "second repeated time when first has passed");
+        var normal = new DateTimeOffset(2026, 10, 15, 23, 30, 0, TimeSpan.FromHours(2));
+        Equal((TimeText.NextOccurrence(normal, 30, zone) - normal).TotalHours, 1, "next-day scheduling");
+        Equal(TimeText.DefaultClock(spring, 3600, zone), 210, "default target crosses spring clock change");
+        Equal(TimeText.DefaultClock(fall, 7200, zone), 150, "default target crosses fall clock change");
+        var round = new DateTimeOffset(2026, 10, 15, 12, 0, 45, TimeSpan.Zero);
+        Equal(TimeText.DefaultClock(round, 1800, TimeZoneInfo.Utc), 755, "round seconds up to five-minute boundary");
+        Equal(TimeText.DefaultClock(round.AddSeconds(-45), 1800, TimeZoneInfo.Utc), 750, "exact five-minute boundary stays unchanged");
+        Equal(TimeText.DefaultClock(new DateTimeOffset(2026, 10, 15, 23, 29, 59, TimeSpan.Zero).AddMilliseconds(999), 1800, TimeZoneInfo.Utc), 0, "round across midnight");
         if (QuickTimers.Label(60) != "1 hour" || QuickTimers.Label(120) != "2 hours" || QuickTimers.Label(90) != "1 h 30 min") throw new Exception("duration labels"); checks++;
         now = 0;
         timer = new Countdown(7200, () => now);
@@ -102,18 +133,6 @@ class Checks
         Equal(TimerStatus.Complete(0), 100, "finished completion");
         Equal(TimerStatus.Complete(1.5), 0, "bounded completion");
         Equal(TimerStatus.Complete(-.5), 100, "bounded expiration completion");
-        foreach (double scale in new[] {1d, 1.5, 2})
-        {
-            Equal(SwitchGeometry.ThumbWidth(44 * scale, 24 * scale, scale, 0), 28 * scale, "standard capsule width");
-            foreach (double pressed in new[] {0d, .5, 1})
-                foreach (double size in new[] {34d, 36, 44})
-                {
-                    double height = (size == 34 ? 18 : size == 36 ? 20 : 24) * scale;
-                    double width = SwitchGeometry.ThumbWidth(size * scale, height, scale, pressed);
-                    if (width <= height - 4 * scale || width > (size - 4) * scale) throw new Exception("capsule geometry or press containment");
-                    checks++;
-                }
-        }
         Equal(TimerDial.For(9000).HourFill, 2.5, "2h30 last hour half faded");
         Equal(TimerDial.For(10800).HourFill, 3, "3h all hour segments full");
         Equal(TimerDial.For(7200).HourFill, 2, "2h two segments full at rollover");

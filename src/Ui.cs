@@ -528,7 +528,7 @@ namespace SleepTimer
         public bool JustClosed => closed.IsRunning && closed.ElapsedMilliseconds < 180;
         public PopupMenu(int width = 224)
         {
-            border = new Border { Width = width, CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1),
+            border = new Border { UseLayoutRounding = true, SnapsToDevicePixels = true, Width = width, CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1),
                 Padding = new Thickness(0, 4, 0, 4), Child = new ThemedScrollViewer { Content = items, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 520 } };
             border.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
             border.SetResourceReference(Border.BorderBrushProperty, "MenuEdgeBrush");
@@ -562,6 +562,12 @@ namespace SleepTimer
             var next = rows.ToArray();
             string signature = Theme.Accent.ToString() + "|" + string.Join("|", next.Select(r => r.Text + "~" + r.Right + "~" + r.Selected + "~" + r.Enabled + "~" + r.Separator + "~" + r.Header + "~" + r.Danger));
             if (signature == rowSignature) return;
+            string focusedText = null;
+            foreach (var button in items.Children.OfType<Button>())
+                if (button.IsKeyboardFocusWithin && button.Content is Grid content)
+                    focusedText = content.Children.OfType<TextBlock>().FirstOrDefault()?.Text;
+            var scroll = (ScrollViewer)border.Child;
+            double scrollOffset = scroll.VerticalOffset;
             rowSignature = signature;
             items.Children.Clear();
             foreach (var row in next)
@@ -599,6 +605,13 @@ namespace SleepTimer
                 button.Click += (s, e) => { if (!row.KeepOpen) Close(); row.Click?.Invoke(); };
                 items.Children.Add(button);
             }
+            if (focusedText != null)
+            {
+                var focused = items.Children.OfType<Button>().FirstOrDefault(button => button.IsEnabled
+                    && button.Content is Grid content && content.Children.OfType<TextBlock>().FirstOrDefault()?.Text == focusedText);
+                if (focused != null) focused.Focus(); else border.Focus();
+            }
+            scroll.ScrollToVerticalOffset(scrollOffset);
         }
         public void Show(IEnumerable<MenuRow> rows, UIElement anchor = null, bool above = false)
         {

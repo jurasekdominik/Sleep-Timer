@@ -44,7 +44,7 @@ namespace SleepTimer
         readonly TextBlock hourStopHelp = new TextBlock { FontSize = 12, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
         readonly TextBlock animationNote = new TextBlock { FontSize = 12, Foreground = Theme.Brush(Theme.Faint) };
         readonly TextBlock accentNote = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
-        readonly TextBox quickMinutes = new TextBox { MaxLength = 32, Width = 184, Tag = "Minutes or hours", ToolTip = "60, 90m, 1h, 1.5h, 1,5h, 1h 30m or 1:30. Up to 24 hours." };
+        readonly TextBox quickMinutes = new TextBox { MaxLength = 32, Width = 184, Tag = "Minutes or hours", ToolTip = "Whole minutes (60, 90) or whole hours (2h, 5h). Up to 24 hours." };
         readonly TextBlock quickNote = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
         readonly StackPanel customRows = new StackPanel();
         readonly ScrollViewer customScroll = new ThemedScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
@@ -77,7 +77,7 @@ namespace SleepTimer
             int hold = Settings.Get("hour_stop_ms", 400);
             hourStop.HoldMilliseconds = hold >= 0 && hold <= AnimationTiming.MaxMilliseconds ? hold : 400;
             clockMode = Settings.Get("clock_mode", false);
-            clockMinute = TimeText.DefaultClock(DateTime.Now, countdown.Duration);
+            clockMinute = TimeText.DefaultClock(DateTimeOffset.Now, countdown.Duration, TimeZoneInfo.Local);
             action = PowerAction.Find(Settings.Get("action", "shutdown"));
             quickAction = PowerAction.Find(Settings.Get("quick_action", action.Key));
             lastQuickMinutes = Settings.Get("quick_timer_last", 30);
@@ -295,7 +295,7 @@ namespace SleepTimer
             Place(timerCard, add, 208, 104);
             add.Click += (s, e) => AddQuickTimer();
             quickMinutes.KeyDown += (s, e) => { if (e.Key == Key.Enter) { AddQuickTimer(); e.Handled = true; } };
-            quickNote.Text = "1–1440 min · 90, 1h, 1.5h or 1h 30m"; quickNote.SetResourceReference(TextBlock.ForegroundProperty, "FaintBrush");
+            quickNote.Text = "1–1440 minutes or 1h–24h · e.g. 90, 2h, 5h"; quickNote.SetResourceReference(TextBlock.ForegroundProperty, "FaintBrush");
             Place(timerCard, quickNote, 16, 144, 288, 20);
             customScroll.Content = customRows;
             Place(timerCard, customScroll, 16, 176, 288, 32);
@@ -397,7 +397,7 @@ namespace SleepTimer
         {
             if (countdown.State != TimerState.Idle || executing) return;
             hourStop.Reset(); clockMode = clock;
-            if (clock && !clockTouched) clockMinute = TimeText.DefaultClock(DateTime.Now, countdown.Duration);
+            if (clock && !clockTouched) clockMinute = TimeText.DefaultClock(DateTimeOffset.Now, countdown.Duration, TimeZoneInfo.Local);
             Settings.Set("clock_mode", clock); SyncMode(true); UpdateView();
         }
         void SyncMode(bool animate)
@@ -479,7 +479,8 @@ namespace SleepTimer
                 case TimerState.Running: countdown.Pause(); break;
                 case TimerState.Paused: countdown.Resume(); break;
                 default:
-                    double seconds = clockMode ? Math.Max(1, (TimeText.NextOccurrence(DateTime.Now, clockMinute) - DateTime.Now).TotalSeconds) : countdown.Duration;
+                    var now = DateTimeOffset.Now;
+                    double seconds = clockMode ? (TimeText.NextOccurrence(now, clockMinute, TimeZoneInfo.Local) - now).TotalSeconds : countdown.Duration;
                     countdown.Start(seconds); warned = false; break;
             }
             ApplyAwake(); UpdateView();
@@ -502,7 +503,7 @@ namespace SleepTimer
         void AddQuickTimer()
         {
             if (!QuickTimers.TryMinutes(quickMinutes.Text.Trim(), out int minutes))
-            { quickNote.Text = "Use minutes or hours, up to 24 h."; quickNote.SetResourceReference(TextBlock.ForegroundProperty, "DangerBrush"); }
+            { quickNote.Text = "Use 1–1440 minutes or 1h–24h."; quickNote.SetResourceReference(TextBlock.ForegroundProperty, "DangerBrush"); }
             else if (!quickTimers.Add(minutes))
             { quickNote.Text = "That timer is already in the quick menu."; quickNote.SetResourceReference(TextBlock.ForegroundProperty, "SecondBrush"); }
             else
@@ -684,8 +685,9 @@ namespace SleepTimer
             face.State = state; face.ClockMode = idle && clockMode;
             if (idle && clockMode)
             {
-                var target = TimeText.NextOccurrence(DateTime.Now, clockMinute);
-                seconds = Math.Max(0, (target - DateTime.Now).TotalSeconds);
+                var now = DateTimeOffset.Now;
+                var target = TimeText.NextOccurrence(now, clockMinute, TimeZoneInfo.Local);
+                seconds = Math.Max(0, (target - now).TotalSeconds);
                 face.Title = action.ClockTitle; face.Time = TimeText.HourMinute(clockMinute);
                 face.Sub = (target.Date > DateTime.Today ? "tomorrow, " : "") + "in " + TimeText.Human(seconds);
                 idleLabel = "at " + face.Time;
@@ -693,12 +695,12 @@ namespace SleepTimer
             else if (idle)
             {
                 face.Title = ""; face.Time = idleLabel = TimeText.Clock(seconds);
-                face.Sub = action.Would + " " + DateTime.Now.AddSeconds(seconds).ToString("HH:mm");
+                face.Sub = action.Would + " " + DateTimeOffset.Now.AddSeconds(seconds).ToLocalTime().ToString("HH:mm");
             }
             else
             {
                 face.Title = state == TimerState.Running ? action.RunTitle : "PAUSED"; face.Time = TimeText.Clock(seconds);
-                face.Sub = state == TimerState.Running ? action.At + " " + DateTime.Now.AddSeconds(seconds).ToString("HH:mm") : "Resume to continue";
+                face.Sub = state == TimerState.Running ? action.At + " " + DateTimeOffset.Now.AddSeconds(seconds).ToLocalTime().ToString("HH:mm") : "Resume to continue";
             }
             Title = face.Time + " · " + (idle ? clockMode ? "Scheduled" : "Ready" : state == TimerState.Running ? "Running" : "Paused");
             face.Tone = TimerStatus.Tone(state, seconds); face.UpdatePosition(seconds, animate, state == TimerState.Running);
@@ -734,7 +736,7 @@ namespace SleepTimer
                 previous?.Dispose(); if (old != IntPtr.Zero) Native.DestroyIcon(old);
             }
         }
-        void Fire()
+        async void Fire()
         {
             if (TestMode) { countdown.Reset(); UpdateView(); return; }
             ticker.Stop(); countdown.Reset(); ApplyAwake(); executing = true;
@@ -748,9 +750,10 @@ namespace SleepTimer
             {
                 new Thread(() =>
                 {
-                    Exception failure = null; try { Native.Sleep(force); } catch (Exception ex) { failure = ex; }
+                    Exception failure = null; try { Native.Sleep(); } catch (Exception ex) { failure = ex; }
                     if (!disposed) Dispatcher.BeginInvoke((Action)(() =>
                     {
+                        if (disposed) return;
                         OnResumed();
                         if (failure != null) tray.ShowBalloonTip(10000, "Sleep Timer", "Could not sleep: " + failure.Message, Forms.ToolTipIcon.Error);
                     }));
@@ -758,8 +761,12 @@ namespace SleepTimer
             }
             else
             {
-                try { Native.Shutdown(action.Key == "restart", force); }
-                catch (Exception ex) { OnResumed(); tray.ShowBalloonTip(10000, "Sleep Timer", "Could not " + action.Verb + ": " + ex.Message, Forms.ToolTipIcon.Error); return; }
+                try
+                {
+                    await System.Threading.Tasks.Task.Run(() => Native.Shutdown(action.Key == "restart", force));
+                    if (disposed) return;
+                }
+                catch (Exception ex) { if (disposed) return; OnResumed(); tray.ShowBalloonTip(10000, "Sleep Timer", "Could not " + action.Verb + ": " + ex.Message, Forms.ToolTipIcon.Error); return; }
                 aborted?.Stop(); aborted = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
                 aborted.Tick += (s, e) => { aborted.Stop(); aborted = null; OnResumed(); }; aborted.Start();
             }

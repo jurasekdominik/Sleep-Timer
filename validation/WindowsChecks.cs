@@ -52,11 +52,11 @@ namespace SleepTimer
             window.UpdateLayout();
             CaptureControl((FrameworkElement)window.Content, name);
         }
-        static void CaptureControl(FrameworkElement root, string name)
+        static void CaptureControl(FrameworkElement root, string name, double scale = 1)
         {
             root.UpdateLayout();
-            int width = (int)Math.Ceiling(root.ActualWidth), height = (int)Math.Ceiling(root.ActualHeight);
-            var image = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            int width = (int)Math.Ceiling(root.ActualWidth * scale), height = (int)Math.Ceiling(root.ActualHeight * scale);
+            var image = new RenderTargetBitmap(width, height, 96 * scale, 96 * scale, PixelFormats.Pbgra32);
             image.Render(root);
             var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(image));
             Directory.CreateDirectory("validation-output");
@@ -107,8 +107,8 @@ namespace SleepTimer
                         var circleInput = Field<TextBox>(window, "circleDuration");
                         var textInput = Field<TextBox>(window, "counterDuration");
                         Check(circleInput.Text == "600" && textInput.Text == "600", "Animation defaults changed");
-                        circleInput.Text = "120"; Call(window, "CommitAnimationInput", circleInput, true);
-                        textInput.Text = "900"; Call(window, "CommitAnimationInput", textInput, false);
+                        circleInput.Text = "120"; Call(window, "CommitAnimationInput", circleInput, 0);
+                        textInput.Text = "900"; Call(window, "CommitAnimationInput", textInput, 1);
                         Check(Settings.Get("circle_sweep_ms", -1) == 120 && Settings.Get("counter_sweep_ms", -1) == 900, "Independent timings were not saved");
                         var reopened = Open();
                         try
@@ -124,23 +124,23 @@ namespace SleepTimer
                         Check(face.CounterPosition > 1800 && face.CounterPosition < 3600 && face.DisplayTime != face.Time, "Slow text followed the fast circle");
                         face.UpdatePosition(3600, false, false); Pump(750);
                         Check(Math.Abs(face.CounterPosition - 3600) < 1, "Status refresh interrupted independent text animation");
-                        circleInput.Text = "900"; Call(window, "CommitAnimationInput", circleInput, true);
-                        textInput.Text = "120"; Call(window, "CommitAnimationInput", textInput, false);
+                        circleInput.Text = "900"; Call(window, "CommitAnimationInput", circleInput, 0);
+                        textInput.Text = "120"; Call(window, "CommitAnimationInput", textInput, 1);
                         face.Snap(1800); face.UpdatePosition(3600, true, false); Pump(250);
                         Check(face.Position > 1800 && face.Position < 3600, "Slow circle followed the fast text");
                         Check(Math.Abs(face.CounterPosition - 3600) < 1 && face.DisplayTime == face.Time, "Fast counter did not complete independently");
                         Pump(750);
                         foreach (string bad in new[] { "-1", "1.5", "10001", "bad", "" })
                         {
-                            circleInput.Text = bad; Call(window, "CommitAnimationInput", circleInput, true);
+                            circleInput.Text = bad; Call(window, "CommitAnimationInput", circleInput, 0);
                             Check(face.CircleMilliseconds == 900 && Settings.Get("circle_sweep_ms", -1) == 900, "Invalid edit replaced the saved timing");
                         }
-                        circleInput.Text = "0"; Call(window, "CommitAnimationInput", circleInput, true);
-                        textInput.Text = "0"; Call(window, "CommitAnimationInput", textInput, false);
+                        circleInput.Text = "0"; Call(window, "CommitAnimationInput", circleInput, 0);
+                        textInput.Text = "0"; Call(window, "CommitAnimationInput", textInput, 1);
                         face.Snap(1800); face.UpdatePosition(3600, true, false);
                         Check(face.Position == 3600 && face.CounterPosition == 3600, "Zero duration did not apply instantly");
-                        circleInput.Text = "600"; Call(window, "CommitAnimationInput", circleInput, true);
-                        textInput.Text = "600"; Call(window, "CommitAnimationInput", textInput, false);
+                        circleInput.Text = "600"; Call(window, "CommitAnimationInput", circleInput, 0);
+                        textInput.Text = "600"; Call(window, "CommitAnimationInput", textInput, 1);
 
                         Call(window, "SetMode", true);
                         Check(Field<bool>(window, "clockMode"), "At time mode failed");
@@ -166,8 +166,8 @@ namespace SleepTimer
                         Check(Field<QuickTimers>(window, "quickTimers").All.Contains(90), "Custom quick timer not added");
                         input.Text = "0"; Call(window, "AddQuickTimer");
                         Check(!Field<QuickTimers>(window, "quickTimers").All.Contains(0), "Invalid quick timer accepted");
-                        var palette = new ColorPicker(Theme.Accent) { Owner = window };
-                        palette.Show(); Pump(50); palette.Close();
+                        var palette = new ColorPicker(Theme.Accent);
+                        palette.Show(face); Pump(50); palette.Close();
                     }
                     finally { Close(window); }
 
@@ -178,6 +178,8 @@ namespace SleepTimer
                         countdown.SetDuration(10800); Call(visual, "UpdateView", false); Pump(150);
                         Check(((FrameworkElement)visual.Content).ActualHeight >= 508, "Client area clips the footer");
                         Capture(visual, "wpf-main");
+                        CaptureControl((FrameworkElement)visual.Content, "wpf-main-150", 1.5);
+                        CaptureControl((FrameworkElement)visual.Content, "wpf-main-200", 2);
                         Check(Field<Canvas>(visual, "main").Children.OfType<BrandFooter>().Count() == 1, "Original wordmark missing");
                         Check(Math.Abs(Field<TranslateTransform>(visual, "modeSlide").X - 54.6666667) < 1, "Duration selector is not centered");
                         Call(visual, "SetMode", true); Pump(400);
@@ -215,6 +217,13 @@ namespace SleepTimer
                             Check(row.Height == 28 && row.Style == Application.Current.FindResource("MenuButton"), "Popup row uses boxed button styling");
                             awake.Close(); Pump(200);
                         }
+                        awake.Show(new[] { new MenuRow { Text = "Keep awake", Right = "00:15" }, new MenuRow { Text = "Quit" } }, anchor);
+                        Pump(50);
+                        var focusPanel = Field<StackPanel>(awake, "items");
+                        focusPanel.Children.OfType<Button>().Last().Focus();
+                        awake.SetRows(new[] { new MenuRow { Text = "Keep awake", Right = "00:14" }, new MenuRow { Text = "Quit" } });
+                        Check(focusPanel.Children.OfType<Button>().Last().IsKeyboardFocusWithin, "Live menu update lost keyboard focus");
+                        awake.Close(); Pump(200);
                         awake.Show((System.Collections.Generic.List<MenuRow>)Call(visual, "ChipRows"), anchor);
                         Pump(200); CaptureControl((FrameworkElement)Field<Popup>(awake, "popup").Child, "wpf-awake-menu"); awake.Close(); Pump(200);
                         var trayPopup = Field<PopupMenu>(visual, "trayMenu");

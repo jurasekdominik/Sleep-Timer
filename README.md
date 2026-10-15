@@ -12,6 +12,8 @@ Requires Windows 10/11 with .NET Framework 4.8 (included on current Windows vers
 - Dial edits animate for 600 ms; the counter follows in minute steps. Hour rollovers retain the scroll direction.
 - Duration and At time modes, keep awake, keep screen on, quick presets, custom presets, startup, force close and accent settings remain available.
 - Close or minimize to hide in the tray. Double-click the tray icon to reopen.
+- Custom timers accept whole minutes (`90`) or whole hours (`2h`, `5h`), up to 24 hours.
+- At-time scheduling respects daylight-saving changes. Skipped times move to the first valid minute; repeated times use the next future occurrence.
 - Tray quick-action changes apply to the next quick timer without changing an active countdown.
 
 ## Build and validation

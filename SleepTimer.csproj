@@ -11,6 +11,5 @@
   <ItemGroup>
     <Compile Include="src/*.cs" Exclude="src/MainForm.cs" />
     <Resource Include="assets/SleepTimer.ico" />
-    <Resource Include="assets/github-mark-white.png" />
   </ItemGroup>
 </Project>
