@@ -5,6 +5,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 
 namespace SleepTimer
 {
@@ -15,8 +17,10 @@ namespace SleepTimer
         readonly PopupMenu weights = new PopupMenu(180);
         readonly StackPanel families = new StackPanel();
         readonly List<Button> choices = new List<Button>();
-        readonly Button timerTab = new Button { Content = "Timer", Margin = new Thickness(0, 0, 8, 0) };
+        readonly Button timerTab = new Button { Content = "TIMER" };
         readonly Button uiTab = new Button { Content = "UI" };
+        readonly Border tabUnderline = new Border { Height = 2.5 };
+        readonly TranslateTransform tabSlide = new TranslateTransform();
         readonly Button weightButton = new Button { Margin = new Thickness(0, 12, 0, 4), HorizontalAlignment = HorizontalAlignment.Left };
         readonly TextBlock note = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 0) };
         public bool IsUi { get; private set; }
@@ -28,8 +32,17 @@ namespace SleepTimer
             ResizeMode = ResizeMode.NoResize; WindowStartupLocation = WindowStartupLocation.CenterOwner;
             Background = Theme.Brush(Theme.Bg); ShowInTaskbar = false; UseLayoutRounding = SnapsToDevicePixels = true;
             var panel = new StackPanel { Margin = new Thickness(16) };
-            var tabs = new StackPanel { Orientation = Orientation.Horizontal };
-            tabs.Children.Add(timerTab); tabs.Children.Add(uiTab); panel.Children.Add(tabs);
+            var tabs = new Canvas { Height = 24 };
+            foreach (var tab in new[] { timerTab, uiTab })
+            {
+                tab.FontSize = 12; tab.FontWeight = FontWeights.SemiBold; tab.Height = 17;
+                tab.Style = (Style)FindResource("TextButton");
+                tab.HorizontalContentAlignment = HorizontalAlignment.Left;
+                tabs.Children.Add(tab);
+            }
+            tabUnderline.RenderTransform = tabSlide;
+            tabUnderline.SetResourceReference(Border.BackgroundProperty, "AccentBrush");
+            Canvas.SetTop(tabUnderline, 18); tabs.Children.Add(tabUnderline); panel.Children.Add(tabs);
             timerTab.Click += (s, e) => SelectScope(false); uiTab.Click += (s, e) => SelectScope(true);
             var available = new TextBlock { Text = "Installed fonts only · no downloads", FontSize = 12, Margin = new Thickness(0, 10, 0, 0) };
             available.SetResourceReference(TextBlock.ForegroundProperty, "FaintBrush"); panel.Children.Add(available);
@@ -57,8 +70,6 @@ namespace SleepTimer
         public void SelectScope(bool ui)
         {
             IsUi = ui; weights.Close(); families.Children.Clear(); choices.Clear();
-            timerTab.Background = Theme.Brush(ui ? Theme.Surface : Theme.Blend(Theme.Surface, Theme.Accent, .18));
-            uiTab.Background = Theme.Brush(ui ? Theme.Blend(Theme.Surface, Theme.Accent, .18) : Theme.Surface);
             foreach (var font in AppFonts.Choices(ui))
             {
                 var row = new Grid(); row.ColumnDefinitions.Add(new ColumnDefinition());
@@ -79,6 +90,16 @@ namespace SleepTimer
         }
         void RefreshChoices()
         {
+            double timerWidth = VisualText.Make(this, "TIMER", 12, Theme.Text, true).WidthIncludingTrailingWhitespace;
+            double uiWidth = VisualText.Make(this, "UI", 12, Theme.Text, true).WidthIncludingTrailingWhitespace;
+            timerTab.Width = timerWidth + 4; uiTab.Width = uiWidth + 4;
+            Canvas.SetLeft(uiTab, timerWidth + 15);
+            timerTab.Foreground = Theme.Brush(IsUi ? Theme.Faint : Theme.Text);
+            uiTab.Foreground = Theme.Brush(IsUi ? Theme.Text : Theme.Faint);
+            tabSlide.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(tabSlide.X, IsUi ? timerWidth + 15 : 0,
+                TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+            tabUnderline.BeginAnimation(WidthProperty, new DoubleAnimation(double.IsNaN(tabUnderline.Width) ? timerWidth : tabUnderline.Width,
+                IsUi ? uiWidth : timerWidth, TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
             var current = IsUi ? AppFonts.Ui : AppFonts.Timer;
             weightButton.Content = "Weight: " + AppFont.WeightName(current.Typeface.Weight) + " ▾";
             foreach (var button in choices)
