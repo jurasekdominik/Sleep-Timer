@@ -103,7 +103,7 @@ namespace SleepTimer
             ResizeMode = ResizeMode.CanMinimize; WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Background = Theme.Brush(Theme.Bg); Content = root;
             SetResourceReference(FontFamilyProperty, "UiFontFamily"); SetResourceReference(FontWeightProperty, "UiFontWeight"); FontSize = 14; Foreground = Theme.Brush(Theme.Text);
-            TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
+            TextOptions.SetTextFormattingMode(this, TextFormattingMode.Ideal);
             TextOptions.SetTextRenderingMode(this, TextRenderingMode.ClearType);
             UseLayoutRounding = true; SnapsToDevicePixels = true;
             Icon = BitmapFrame.Create(new Uri("pack://application:,,,/assets/SleepTimer.ico"));
@@ -139,7 +139,7 @@ namespace SleepTimer
             tray.MouseUp += (s, e) =>
             {
                 if (e.Button != Forms.MouseButtons.Right) return;
-                var point = Forms.Cursor.Position;
+                Native.GetPhysicalCursorPos(out var point);
                 trayClick = new Point(point.X, point.Y);
                 Dispatcher.BeginInvoke((Action)ShowTrayMenu);
             };
@@ -604,8 +604,21 @@ namespace SleepTimer
             panel.Children.Add(Label(ui ? "Choose a UI font" : "Choose a timer font", 16));
             var available = Label("Installed fonts only · no downloads", 12, true);
             available.Margin = new Thickness(0, 6, 0, 0); panel.Children.Add(available);
+            var weights = new PopupMenu(180);
+            var weightButton = new Button { Margin = new Thickness(0, 10, 0, 4), HorizontalAlignment = HorizontalAlignment.Left };
+            panel.Children.Add(weightButton);
             var choices = new List<Button>();
-            foreach (var font in AppFonts.All)
+            Action refresh = null;
+            weightButton.Click += (s, e) =>
+            {
+                if (weights.Visible || weights.JustClosed) return;
+                var current = ui ? AppFonts.Ui : AppFonts.Timer;
+                weights.Show(current.Weights.Select(weight => new MenuRow {
+                    Text = AppFont.WeightName(weight), Selected = weight == current.Typeface.Weight,
+                    Click = () => { ApplyFontWeight(weight.ToOpenTypeWeight(), ui); refresh(); }
+                }), weightButton);
+            };
+            foreach (var font in AppFonts.Choices(ui))
             {
                 var row = new Grid();
                 row.ColumnDefinitions.Add(new ColumnDefinition());
@@ -616,15 +629,28 @@ namespace SleepTimer
                 Grid.SetColumn(sample, 1); row.Children.Add(sample);
                 var choice = new Button { Content = row, Height = 56, Margin = new Thickness(0, 8, 0, 0), Padding = new Thickness(10, 4, 10, 4),
                     HorizontalContentAlignment = HorizontalAlignment.Stretch, Tag = font, ToolTip = font.Name };
-                choice.BorderBrush = Theme.Brush(font == (ui ? AppFonts.Ui : AppFonts.Timer) ? Theme.Accent : Theme.Border);
+                choice.BorderBrush = Theme.Brush(font.Key == (ui ? AppFonts.Ui : AppFonts.Timer).Key ? Theme.Accent : Theme.Border);
                 choice.Click += (s, e) =>
                 {
                     ApplyFont(font.Key, ui);
-                    foreach (var button in choices) button.BorderBrush = Theme.Brush(button.Tag == (ui ? AppFonts.Ui : AppFonts.Timer) ? Theme.Accent : Theme.Border);
+                    refresh();
                 };
                 choices.Add(choice); panel.Children.Add(choice);
             }
-            var note = Label(ui ? "Changes labels, controls, menus and tooltips. Timer digits keep their own font." : "Changes timer digits only. The UI has its own font selection.", 12, true);
+            refresh = () =>
+            {
+                var current = ui ? AppFonts.Ui : AppFonts.Timer;
+                weightButton.Content = "Weight: " + AppFont.WeightName(current.Typeface.Weight) + " ▾";
+                foreach (var button in choices)
+                {
+                    var family = (AppFont)button.Tag;
+                    button.BorderBrush = Theme.Brush(family.Key == current.Key ? Theme.Accent : Theme.Border);
+                    var sample = ((Grid)button.Content).Children.OfType<TextBlock>().Last();
+                    sample.FontWeight = family.WithWeight(current.Typeface.Weight.ToOpenTypeWeight()).Typeface.Weight;
+                }
+            };
+            refresh();
+            var note = Label(ui ? "Readable UI families only. Only installed weights are offered. Timer digits keep their own font." : "Changes timer digits only. Only installed weights are offered; unsupported weights are not simulated.", 12, true);
             note.TextWrapping = TextWrapping.Wrap; note.Margin = new Thickness(0, 12, 0, 0); panel.Children.Add(note);
             var done = new Button { Content = "Done", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
             done.Click += (s, e) => gallery.Close(); panel.Children.Add(done);
@@ -632,12 +658,19 @@ namespace SleepTimer
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, MaxHeight = Math.Max(240, SystemParameters.WorkArea.Height - 80) };
             gallery.PreviewKeyDown += (s, e) => { if (e.Key == Key.Escape) { gallery.Close(); e.Handled = true; } };
             gallery.SourceInitialized += (s, e) => Native.DarkTitlebar(new WindowInteropHelper(gallery).Handle);
-            gallery.Closed += (s, e) => fontGallery = null;
+            gallery.Closed += (s, e) => { weights.Dispose(); fontGallery = null; };
             fontGallery = gallery; gallery.Show();
         }
         void ApplyFont(string key, bool ui)
         {
-            var font = AppFonts.Find(key);
+            SetFont(AppFonts.Select(key, ui, Settings.Get(ui ? "ui_font_weight" : "timer_font_weight", -1)), ui);
+        }
+        void ApplyFontWeight(int weight, bool ui)
+        {
+            SetFont(AppFonts.Select((ui ? AppFonts.Ui : AppFonts.Timer).Key, ui, weight), ui);
+        }
+        void SetFont(AppFont font, bool ui)
+        {
             if (ui)
             {
                 AppFonts.Ui = font;
@@ -648,6 +681,7 @@ namespace SleepTimer
             }
             else AppFonts.Timer = font;
             Settings.Set(ui ? "ui_font" : "timer_font", font.Key);
+            Settings.Set(ui ? "ui_font_weight" : "timer_font_weight", font.Typeface.Weight.ToOpenTypeWeight());
             InvalidateTree(root);
         }
 

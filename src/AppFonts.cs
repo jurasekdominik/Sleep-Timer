@@ -9,14 +9,27 @@ namespace SleepTimer
     sealed class AppFont
     {
         public readonly string Key, Name, Family;
+        public readonly bool ForUi;
         public readonly Typeface Typeface, BoldTypeface;
-        public AppFont(string key, string name, string family, FontWeight weight)
+        public readonly FontWeight[] Weights;
+        public AppFont(string key, string family, bool forUi = true)
+            : this(key, family, forUi, new FontFamily(family).GetTypefaces()
+                .Where(face => face.Style == FontStyles.Normal && face.Stretch == FontStretches.Normal)
+                .Select(face => face.Weight).Distinct().OrderBy(weight => weight.ToOpenTypeWeight()).ToArray(), FontWeights.Normal) { }
+        AppFont(string key, string family, bool forUi, FontWeight[] weights, FontWeight requested)
         {
-            Key = key; Name = name; Family = family;
+            Key = key; Name = Family = family; ForUi = forUi;
+            Weights = weights.Length == 0 ? new[] { FontWeights.Normal } : weights;
             var fallback = new FontFamily(family == "Segoe UI" ? family : family + ", Segoe UI");
-            Typeface = new Typeface(fallback, FontStyles.Normal, weight, FontStretches.Normal);
-            BoldTypeface = new Typeface(fallback, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+            Typeface = new Typeface(fallback, FontStyles.Normal, Nearest(requested), FontStretches.Normal);
+            BoldTypeface = new Typeface(fallback, FontStyles.Normal, Nearest(FontWeights.SemiBold), FontStretches.Normal);
         }
+        FontWeight Nearest(FontWeight requested) => Weights.OrderBy(weight =>
+            Math.Abs(weight.ToOpenTypeWeight() - requested.ToOpenTypeWeight())).First();
+        public AppFont WithWeight(int weight) => new AppFont(Key, Family, ForUi, Weights,
+            FontWeight.FromOpenTypeWeight(weight >= 1 && weight <= 999 ? weight : 400));
+        public static string WeightName(FontWeight weight) => weight == FontWeights.Normal ? "Regular"
+            : weight.ToOpenTypeWeight() == 350 ? "Semilight" : weight.ToString();
     }
 
     static class AppFonts
@@ -24,37 +37,23 @@ namespace SleepTimer
         static readonly HashSet<string> installed = new HashSet<string>(
             Fonts.SystemFontFamilies.Select(font => font.Source), StringComparer.OrdinalIgnoreCase);
         public static readonly AppFont[] All = new[] {
-            new AppFont("segoe", "Segoe UI · Regular", "Segoe UI", FontWeights.Normal),
-            new AppFont("light", "Segoe UI · Light", "Segoe UI", FontWeights.Light),
-            new AppFont("semilight", "Segoe UI · Semilight", "Segoe UI", FontWeight.FromOpenTypeWeight(350)),
-            new AppFont("semibold", "Segoe UI · Semibold", "Segoe UI", FontWeights.SemiBold),
-            new AppFont("segoe-variable", "Segoe UI Variable", "Segoe UI Variable", FontWeights.Normal),
-            new AppFont("segoe-variable-text", "Segoe UI Variable Text", "Segoe UI Variable Text", FontWeights.Normal),
-            new AppFont("segoe-variable-display", "Segoe UI Variable Display", "Segoe UI Variable Display", FontWeights.Normal),
-            new AppFont("aptos", "Aptos", "Aptos", FontWeights.Normal),
-            new AppFont("aptos-display", "Aptos Display", "Aptos Display", FontWeights.Normal),
-            new AppFont("aptos-narrow", "Aptos Narrow", "Aptos Narrow", FontWeights.Normal),
-            new AppFont("aptos-mono", "Aptos Mono", "Aptos Mono", FontWeights.Normal),
-            new AppFont("aptos-serif", "Aptos Serif", "Aptos Serif", FontWeights.Normal),
-            new AppFont("bahnschrift", "Bahnschrift", "Bahnschrift", FontWeights.Normal),
-            new AppFont("calibri", "Calibri", "Calibri", FontWeights.Normal),
-            new AppFont("corbel", "Corbel", "Corbel", FontWeights.Normal),
-            new AppFont("candara", "Candara", "Candara", FontWeights.Normal),
-            new AppFont("tahoma", "Tahoma", "Tahoma", FontWeights.Normal),
-            new AppFont("arial", "Arial", "Arial", FontWeights.Normal),
-            new AppFont("verdana", "Verdana", "Verdana", FontWeights.Normal),
-            new AppFont("trebuchet", "Trebuchet MS", "Trebuchet MS", FontWeights.Normal),
-            new AppFont("century-gothic", "Century Gothic", "Century Gothic", FontWeights.Normal),
-            new AppFont("georgia", "Georgia", "Georgia", FontWeights.Normal),
-            new AppFont("times", "Times New Roman", "Times New Roman", FontWeights.Normal),
-            new AppFont("cambria", "Cambria", "Cambria", FontWeights.Normal),
-            new AppFont("constantia", "Constantia", "Constantia", FontWeights.Normal),
-            new AppFont("consolas", "Consolas", "Consolas", FontWeights.Normal),
-            new AppFont("cascadia-mono", "Cascadia Mono", "Cascadia Mono", FontWeights.Normal),
-            new AppFont("cascadia-code", "Cascadia Code", "Cascadia Code", FontWeights.Normal),
-            new AppFont("lucida-console", "Lucida Console", "Lucida Console", FontWeights.Normal)
-        }.Where(font => font.Key == "segoe" || installed.Contains(font.Family)).ToArray();
+            ("segoe", "Segoe UI", true), ("aptos", "Aptos", true),
+            ("calibri", "Calibri", true), ("corbel", "Corbel", true),
+            ("tahoma", "Tahoma", true), ("arial", "Arial", true), ("verdana", "Verdana", true),
+            ("bahnschrift", "Bahnschrift", false), ("consolas", "Consolas", false),
+            ("cascadia-mono", "Cascadia Mono", false)
+        }.Where(font => font.Item1 == "segoe" || installed.Contains(font.Item2))
+            .Select(font => new AppFont(font.Item1, font.Item2, font.Item3)).ToArray();
+        public static IEnumerable<AppFont> Choices(bool ui) => All.Where(font => !ui || font.ForUi);
         public static AppFont Timer = All[0], Ui = All[0];
         public static AppFont Find(string key) => All.FirstOrDefault(font => font.Key == key) ?? All[0];
+        public static AppFont Select(string key, bool ui, int weight)
+        {
+            // Migrate the old separate Segoe weight presets without losing the selection.
+            if (weight == -1) weight = key == "light" ? 300 : key == "semilight" ? 350 : key == "semibold" ? 600 : 400;
+            var font = Find(key);
+            if (ui && !font.ForUi) font = All[0];
+            return font.WithWeight(weight);
+        }
     }
 }

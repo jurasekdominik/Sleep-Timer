@@ -15,6 +15,7 @@ cat > "$check_dir/Checks.csproj" <<'PROJECT'
     <Compile Include="$(SleepTimerRoot)/src/AnimationTiming.cs" />
     <Compile Include="$(SleepTimerRoot)/src/PowerAction.cs" />
     <Compile Include="$(SleepTimerRoot)/src/Shortcut.cs" />
+    <Compile Include="$(SleepTimerRoot)/src/ScreenPlacement.cs" />
   </ItemGroup>
 </Project>
 PROJECT
@@ -103,6 +104,18 @@ class Checks
         Shortcut.TryCreate(3, 0x86, out var secondShortcut);
         if (!firstShortcut.Matches(duplicateShortcut) || firstShortcut.Matches(secondShortcut)) throw new Exception("shortcut collision detection");
         checks++;
+        foreach (var sample in new[] {
+            (1900, 1050, 224, 300, 0, 0, 1920, 1040, 1676, 740),
+            (-20, 1000, 224, 300, -1920, 0, 0, 1040, -244, 700),
+            (2000, 500, 320, 400, 1920, 0, 4480, 1400, 1920, 100),
+            (100, -1000, 300, 500, 0, -1440, 2560, 0, 0, -1440),
+            (1910, 10, 224, 300, 0, 40, 1920, 1080, 1686, 40) })
+        {
+            var position = ScreenPlacement.Above(sample.Item1, sample.Item2, sample.Item3, sample.Item4,
+                sample.Item5, sample.Item6, sample.Item7, sample.Item8);
+            Equal(position.X, sample.Item9, "tray monitor horizontal pixel positioning");
+            Equal(position.Y, sample.Item10, "tray monitor vertical pixel positioning");
+        }
         var zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Prague");
         var fall = new DateTimeOffset(2026, 10, 25, 1, 30, 0, TimeSpan.FromHours(2));
         Equal((TimeText.NextOccurrence(fall, 210, zone) - fall).TotalHours, 3, "fall clock transition");

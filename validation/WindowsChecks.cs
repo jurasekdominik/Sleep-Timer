@@ -179,6 +179,7 @@ namespace SleepTimer
                     Settings.Set("clock_mode", false); Settings.Set("duration", 1800);
                     Settings.Set("circle_sweep_ms", 600); Settings.Set("counter_sweep_ms", 600);
                     Settings.Set("timer_font", "segoe"); Settings.Set("ui_font", "segoe");
+                    Settings.Set("timer_font_weight", 400); Settings.Set("ui_font_weight", 400);
                     Settings.Set("hotkey_toggle_key", 0); Settings.Set("hotkey_toggle_modifiers", 0);
                     Settings.Set("hotkey_quick_key", 0); Settings.Set("hotkey_quick_modifiers", 0);
                     var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -303,15 +304,15 @@ namespace SleepTimer
                             Call(visual, "ApplyFont", font.Key, false); Pump(50);
                             Capture(visual, "wpf-font-" + font.Key);
                             var artwork = Field<System.Collections.IDictionary>(fontFace, "textArtwork")[45.3];
-                            Check((Typeface)artwork.GetType().GetField("Typeface").GetValue(artwork) == font.Typeface,
+                            Check((Typeface)artwork.GetType().GetField("Typeface").GetValue(artwork) == AppFonts.Timer.Typeface,
                                 "Changing the timer font left stale cached glyphs");
-                            Check(AppFonts.Find(Settings.Get("timer_font", "")) == font && AppFonts.Ui.Key == "segoe", "Timer font was not saved independently of UI");
+                            Check(AppFonts.Find(Settings.Get("timer_font", "")).Key == font.Key && AppFonts.Ui.Key == "segoe", "Timer font was not saved independently of UI");
                         }
                         Call(visual, "ApplyFont", "segoe", false); Pump(50);
-                        foreach (var font in AppFonts.All)
+                        foreach (var font in AppFonts.Choices(true))
                         {
                             Call(visual, "ApplyFont", font.Key, true); Pump(50);
-                            Check(visual.FontFamily == font.Typeface.FontFamily && Field<TextBox>(visual, "clockField").FontFamily == font.Typeface.FontFamily,
+                            Check(visual.FontFamily.Source == AppFonts.Ui.Typeface.FontFamily.Source && Field<TextBox>(visual, "clockField").FontFamily.Source == AppFonts.Ui.Typeface.FontFamily.Source,
                                 "UI font did not update window or input controls");
                             Check(AppFonts.Timer.Key == "segoe", "UI font changed the timer font");
                             Check(Settings.Get("ui_font", "") == font.Key && Settings.Get("timer_font", "") == "segoe", "Font selections were not saved independently");
@@ -319,7 +320,27 @@ namespace SleepTimer
                             Check(Canvas.GetLeft(buttons.Last()) + buttons.Last().Width <= 320.5, "UI font pushes settings tabs outside the window");
                             if (font.Key == "aptos" || font.Key == "verdana" || font.Key == "consolas") Capture(visual, "wpf-ui-font-" + font.Key);
                         }
-                        Call(visual, "ApplyFont", "segoe", true); Pump(50);
+                        Check(AppFonts.Choices(true).All(font => font.ForUi && font.Key != "bahnschrift"), "Display fonts leak into readable UI choices");
+                        Check(AppFonts.Select("bahnschrift", true, -1).Key == "segoe", "Old Bahnschrift UI choice has no readable fallback");
+                        Check(AppFonts.Select("light", false, -1).Typeface.Weight == FontWeights.Light, "Legacy Segoe light preset was not migrated");
+                        foreach (var font in AppFonts.All)
+                        {
+                            Call(visual, "ApplyFont", font.Key, false);
+                            foreach (var weight in font.Weights)
+                            {
+                                Call(visual, "ApplyFontWeight", weight.ToOpenTypeWeight(), false); Pump(20);
+                                Check(AppFonts.Timer.Key == font.Key && AppFonts.Timer.Typeface.Weight == weight,
+                                    "Timer weight selection does not match an installed face");
+                                Check(Settings.Get("timer_font_weight", 0) == weight.ToOpenTypeWeight(), "Timer weight was not saved");
+                            }
+                        }
+                        Call(visual, "ApplyFont", "segoe", false); Call(visual, "ApplyFontWeight", 400, false);
+                        Call(visual, "ApplyFont", "segoe", true); Call(visual, "ApplyFontWeight", 700, true);
+                        Check(AppFonts.Timer.Typeface.Weight == FontWeights.Normal && AppFonts.Ui.Typeface.Weight == FontWeights.Bold,
+                            "UI and timer weights are not independent");
+                        Check(AppFonts.Select(Settings.Get("ui_font", ""), true, Settings.Get("ui_font_weight", -1)).Typeface.Weight == FontWeights.Bold,
+                            "UI weight does not reload from settings");
+                        Call(visual, "ApplyFontWeight", 400, true); Pump(50);
                         Call(visual, "OpenFontGallery", true); Pump(100);
                         Check(Field<Window>(visual, "fontGallery").Title == "UI font", "UI gallery opened with the wrong target");
                         CaptureControl((FrameworkElement)Field<Window>(visual, "fontGallery").Content, "wpf-ui-font-gallery");
@@ -406,6 +427,18 @@ namespace SleepTimer
                         Check(Math.Abs(firstBounds.Left - nextBounds.Left) <= 2 && Math.Abs(firstBounds.Top - nextBounds.Top) <= 2,
                             "Tray popup moved after selecting keep awake and reopening");
                         trayPopup.Close(); Call(visual, "SetAwake", 0); visual.Show(); Pump(200);
+                        foreach (var monitor in System.Windows.Forms.Screen.AllScreens)
+                        {
+                            var area = monitor.WorkingArea;
+                            int px = area.Left + area.Width * 3 / 4, py = area.Top + area.Height * 3 / 4;
+                            Set(visual, "trayClick", new System.Windows.Point(px, py)); Call(visual, "ShowTrayMenu"); Pump(150);
+                            var bounds = PopupBounds(trayPopup);
+                            var expected = ScreenPlacement.Above(px, py, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top,
+                                area.Left, area.Top, area.Right, area.Bottom);
+                            Check(Math.Abs(bounds.Left - expected.X) <= 2 && Math.Abs(bounds.Top - expected.Y) <= 2,
+                                "Tray popup ignored the clicked monitor's physical pixels");
+                            trayPopup.Close(); Pump(200);
+                        }
                         SendMessage(new WindowInteropHelper(visual).Handle, 0x0112, (IntPtr)0xF100, IntPtr.Zero);
                         var info = new GuiThreadInfo { Size = Marshal.SizeOf(typeof(GuiThreadInfo)) };
                         Check(GetGUIThreadInfo(0, ref info) && (info.Flags & 4) == 0, "Alt release activated menu mode");

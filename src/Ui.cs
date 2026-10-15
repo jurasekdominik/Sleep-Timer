@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Markup;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
@@ -44,8 +45,8 @@ namespace SleepTimer
 
         public static void Init(Application app)
         {
-            AppFonts.Timer = AppFonts.Find(Settings.Get("timer_font", "segoe"));
-            AppFonts.Ui = AppFonts.Find(Settings.Get("ui_font", "segoe"));
+            AppFonts.Timer = AppFonts.Select(Settings.Get("timer_font", "segoe"), false, Settings.Get("timer_font_weight", -1));
+            AppFonts.Ui = AppFonts.Select(Settings.Get("ui_font", "segoe"), true, Settings.Get("ui_font_weight", -1));
             string saved = Settings.Get("accent", DefaultAccent);
             if (System.Text.RegularExpressions.Regex.IsMatch(saved, "^#[0-9A-Fa-f]{6}$")) Accent = Hex(saved);
             app.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(Styles));
@@ -70,8 +71,9 @@ namespace SleepTimer
         const string Styles = @"
 <ResourceDictionary xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
  xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
- <Style TargetType='Window'><Setter Property='Foreground' Value='{DynamicResource TextBrush}'/><Setter Property='FontFamily' Value='{DynamicResource UiFontFamily}'/><Setter Property='FontWeight' Value='{DynamicResource UiFontWeight}'/><Setter Property='FontSize' Value='14'/></Style>
+ <Style TargetType='Window'><Setter Property='TextOptions.TextFormattingMode' Value='Ideal'/><Setter Property='TextOptions.TextRenderingMode' Value='ClearType'/><Setter Property='Foreground' Value='{DynamicResource TextBrush}'/><Setter Property='FontFamily' Value='{DynamicResource UiFontFamily}'/><Setter Property='FontWeight' Value='{DynamicResource UiFontWeight}'/><Setter Property='FontSize' Value='14'/></Style>
  <Style TargetType='ToolTip'>
+  <Setter Property='TextOptions.TextFormattingMode' Value='Ideal'/><Setter Property='TextOptions.TextRenderingMode' Value='Grayscale'/>
   <Setter Property='Background' Value='{DynamicResource SurfaceBrush}'/>
   <Setter Property='Foreground' Value='{DynamicResource TextBrush}'/>
   <Setter Property='BorderBrush' Value='{DynamicResource BorderBrush}'/>
@@ -545,6 +547,14 @@ namespace SleepTimer
         readonly StackPanel items = new StackPanel();
         readonly Stopwatch closed = new Stopwatch();
         string rowSignature;
+        Point? screenAnchor;
+        HwndSource pinnedSource;
+        IntPtr PinPosition(IntPtr window, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (message == 0x0046 && screenAnchor.HasValue)
+                Native.PinPopup(window, message, lParam, new Native.ScreenPoint { X = (int)screenAnchor.Value.X, Y = (int)screenAnchor.Value.Y });
+            return IntPtr.Zero;
+        }
         public bool Visible => popup.IsOpen;
         public bool JustClosed => closed.IsRunning && closed.ElapsedMilliseconds < 180;
         public PopupMenu(int width = 224)
@@ -553,15 +563,31 @@ namespace SleepTimer
                 Padding = new Thickness(0, 4, 0, 4), Child = new ThemedScrollViewer { Content = items, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 520 } };
             border.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
             border.SetResourceReference(Border.BorderBrushProperty, "MenuEdgeBrush");
+            TextOptions.SetTextFormattingMode(border, TextFormattingMode.Ideal);
+            TextOptions.SetTextRenderingMode(border, TextRenderingMode.Grayscale);
             border.Focusable = true;
             border.FocusVisualStyle = null;
             KeyboardNavigation.SetTabNavigation(border, KeyboardNavigationMode.Cycle);
             popup.Child = border;
-            popup.Closed += (s, e) => closed.Restart();
+            popup.Closed += (s, e) =>
+            {
+                if (pinnedSource != null) pinnedSource.RemoveHook(PinPosition);
+                pinnedSource = null; screenAnchor = null; closed.Restart();
+            };
             popup.Opened += (s, e) =>
             {
                 // Show at full opacity: starting a fade here briefly exposed the popup before hiding it.
                 // Opening a menu must not paint its first item as selected.
+                if (screenAnchor.HasValue)
+                {
+                    pinnedSource = PresentationSource.FromVisual(border) as HwndSource;
+                    if (pinnedSource != null)
+                    {
+                        pinnedSource.AddHook(PinPosition);
+                        Native.PinPopup(pinnedSource.Handle, 0, IntPtr.Zero,
+                            new Native.ScreenPoint { X = (int)screenAnchor.Value.X, Y = (int)screenAnchor.Value.Y });
+                    }
+                }
                 border.Focus();
             };
             border.PreviewKeyDown += (s, e) =>
@@ -648,21 +674,14 @@ namespace SleepTimer
             // Measure before opening so the tray popup has a real size on the first show.
             border.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             if (anchor == null) popup.VerticalOffset = -border.DesiredSize.Height;
-            if (screenPosition.HasValue && anchor != null)
+            screenAnchor = screenPosition;
+            if (screenAnchor.HasValue)
             {
-                // Capture the screen point at the tray click. Never reuse Popup's
-                // cached mouse position after navigating or reopening the menu.
-                Point screen = screenPosition.Value;
+                // Native positioning uses the tray monitor's physical pixels.
+                // WPF placement against the main window can clamp to its monitor.
+                popup.PlacementTarget = null;
+                popup.Placement = PlacementMode.AbsolutePoint;
                 popup.HorizontalOffset = popup.VerticalOffset = 0;
-                popup.Placement = PlacementMode.Custom;
-                popup.CustomPopupPlacementCallback = (size, target, offset) =>
-                {
-                    Point at = anchor.PointFromScreen(screen);
-                    return new[] {
-                        new CustomPopupPlacement(new Point(at.X - size.Width, at.Y - size.Height), PopupPrimaryAxis.Horizontal),
-                        new CustomPopupPlacement(new Point(at.X - size.Width, at.Y), PopupPrimaryAxis.Horizontal)
-                    };
-                };
             }
             border.BeginAnimation(UIElement.OpacityProperty, null);
             border.Opacity = 1;

@@ -25,6 +25,43 @@ namespace SleepTimer
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool UnregisterHotKey(IntPtr window, int id);
 
+        [StructLayout(LayoutKind.Sequential)] public struct ScreenPoint { public int X, Y; }
+        [StructLayout(LayoutKind.Sequential)] public struct ScreenRect { public int Left, Top, Right, Bottom; }
+        [StructLayout(LayoutKind.Sequential)] struct MonitorInfo { public int Size; public ScreenRect Bounds, Work; public uint Flags; }
+        [StructLayout(LayoutKind.Sequential)] struct WindowPosition
+        {
+            public IntPtr Window, InsertAfter;
+            public int X, Y, Width, Height;
+            public uint Flags;
+        }
+        [DllImport("user32.dll")] public static extern bool GetPhysicalCursorPos(out ScreenPoint point);
+        [DllImport("user32.dll")] static extern IntPtr MonitorFromPoint(ScreenPoint point, uint flags);
+        [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
+        [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr window, out ScreenRect rect);
+        [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
+
+        public static void PinPopup(IntPtr window, int message, IntPtr position, ScreenPoint at)
+        {
+            var info = new MonitorInfo { Size = Marshal.SizeOf(typeof(MonitorInfo)) };
+            if (!GetMonitorInfo(MonitorFromPoint(at, 2), ref info)) return;
+            if (!GetWindowRect(window, out ScreenRect rect)) return;
+            if (message == 0x0046) // WM_WINDOWPOSCHANGING: override WPF's owner-monitor clipping.
+            {
+                var next = Marshal.PtrToStructure<WindowPosition>(position);
+                int width = (next.Flags & 1) != 0 ? rect.Right - rect.Left : next.Width;
+                int height = (next.Flags & 1) != 0 ? rect.Bottom - rect.Top : next.Height;
+                var point = ScreenPlacement.Above(at.X, at.Y, width, height, info.Work.Left, info.Work.Top, info.Work.Right, info.Work.Bottom);
+                next.X = point.X; next.Y = point.Y; next.Flags &= ~2u; // SWP_NOMOVE
+                Marshal.StructureToPtr(next, position, false);
+            }
+            else
+            {
+                var point = ScreenPlacement.Above(at.X, at.Y, rect.Right - rect.Left, rect.Bottom - rect.Top,
+                    info.Work.Left, info.Work.Top, info.Work.Right, info.Work.Bottom);
+                SetWindowPos(window, IntPtr.Zero, point.X, point.Y, 0, 0, 0x0015); // no size, z-order or activation
+            }
+        }
+
         public static void DarkTitlebar(IntPtr hwnd)
         {
             try { int on = 1; DwmSetWindowAttribute(hwnd, 20, ref on, 4); } catch { }
