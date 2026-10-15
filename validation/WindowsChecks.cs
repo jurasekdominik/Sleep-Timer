@@ -284,6 +284,8 @@ namespace SleepTimer
                         var thumb = (Border)toggle.Template.FindName("thumb", toggle);
                         Check(((SolidColorBrush)thumb.Background).Color == Colors.White && thumb.Width == Design.ThumbWidth && thumb.Height == Design.ThumbHeight, "Original switch capsule was changed");
                         var viewer = Field<Grid>(visual, "settings").Children.OfType<ScrollViewer>().Single();
+                        var settingsBar = (ScrollBar)viewer.Template.FindName("PART_VerticalScrollBar", viewer);
+                        Check(settingsBar.ActualWidth <= Design.Gap + 1, "Scrollbar does not use the shared 8 px width");
                         viewer.ScrollToVerticalOffset(viewer.ScrollableHeight); Pump(80);
                         Check(viewer.VerticalOffset >= viewer.ScrollableHeight - 1, "Settings scrollbar did not follow content");
                         viewer.ScrollToHome(); Pump(80);

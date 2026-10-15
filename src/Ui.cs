@@ -413,7 +413,12 @@ namespace SleepTimer
         public override void OnApplyTemplate()
         {
             base.OnApplyTemplate();
-            if (GetTemplateChild("PART_VerticalScrollBar") is ScrollBar bar) bar.Width = Design.Gap;
+            if (GetTemplateChild("PART_VerticalScrollBar") is ScrollBar bar)
+            {
+                bar.Style = (Style)Application.Current.FindResource(typeof(ScrollBar));
+                bar.Width = bar.MinWidth = bar.MaxWidth = Design.Gap;
+                bar.HorizontalAlignment = HorizontalAlignment.Right;
+            }
         }
     }
 
