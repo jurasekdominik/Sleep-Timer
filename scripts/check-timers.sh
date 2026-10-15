@@ -14,6 +14,7 @@ cat > "$check_dir/Checks.csproj" <<'PROJECT'
     <Compile Include="$(SleepTimerRoot)/src/WheelInput.cs" />
     <Compile Include="$(SleepTimerRoot)/src/AnimationTiming.cs" />
     <Compile Include="$(SleepTimerRoot)/src/PowerAction.cs" />
+    <Compile Include="$(SleepTimerRoot)/src/Shortcut.cs" />
   </ItemGroup>
 </Project>
 PROJECT
@@ -81,6 +82,27 @@ class Checks
                 throw new Exception("Power action/force arguments do not match the selected action");
             checks++;
         }
+        foreach (int modifiers in new[] { 1, 2, 3, 6, 8, 15 })
+        {
+            if (!Shortcut.TryCreate(modifiers, 0x41, out var binding)) throw new Exception("valid shortcut rejected");
+            if (!binding.MatchesMessage((0x41L << 16) | modifiers)
+                || !binding.MatchesMessage((0x41L << 16) | modifiers | 0x4000)
+                || binding.MatchesMessage((0x42L << 16) | modifiers)) throw new Exception("shortcut message matching");
+            checks++;
+        }
+        foreach (var invalid in new[] { (0, 0x41), (4, 0x41), (16, 0x41), (2, 0), (2, 0x11), (2, 0x5B), (2, 0x100) })
+        {
+            if (Shortcut.TryCreate(invalid.Item1, invalid.Item2, out _)) throw new Exception("unsafe shortcut accepted");
+            checks++;
+        }
+        if (default(Shortcut).IsBound || default(Shortcut).Matches(default)
+            || default(Shortcut).MatchesMessage(0)) throw new Exception("unbound shortcut can match");
+        checks++;
+        Shortcut.TryCreate(3, 0x87, out var firstShortcut);
+        Shortcut.TryCreate(3, 0x87, out var duplicateShortcut);
+        Shortcut.TryCreate(3, 0x86, out var secondShortcut);
+        if (!firstShortcut.Matches(duplicateShortcut) || firstShortcut.Matches(secondShortcut)) throw new Exception("shortcut collision detection");
+        checks++;
         var zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Prague");
         var fall = new DateTimeOffset(2026, 10, 25, 1, 30, 0, TimeSpan.FromHours(2));
         Equal((TimeText.NextOccurrence(fall, 210, zone) - fall).TotalHours, 3, "fall clock transition");

@@ -14,6 +14,8 @@ Requires Windows 10/11 with .NET Framework 4.8 (included on current Windows vers
 - Close or minimize to hide in the tray. Double-click the tray icon to reopen.
 - Custom timers accept whole minutes (`90`) or whole hours (`2h`, `5h`), up to 24 hours.
 - At-time scheduling respects daylight-saving changes. Skipped times move to the first valid minute; repeated times use the next future occurrence.
+- Settings → **Appearance → Fonts…** previews six system-font variations for timer digits: Segoe UI Regular, Light, Semilight, Semibold, Bahnschrift and Consolas. The default is Segoe UI Regular; other interface text remains Segoe UI.
+- Settings → **Keybinds** offers global **Start / Cancel** and **Start last used quick timer** shortcuts. Both start unbound. Click a field and press a combination with Ctrl, Alt or Win; Delete clears it. Shortcut actions show a Windows notification (subject to Windows notification settings). With no previous quick timer, the quick shortcut starts 30 minutes.
 - Tray quick-action changes apply to the next quick timer without changing an active countdown.
 
 ## Build and validation

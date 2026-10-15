@@ -44,6 +44,7 @@ namespace SleepTimer
 
         public static void Init(Application app)
         {
+            TimerFonts.Current = TimerFonts.Find(Settings.Get("timer_font", "segoe"));
             string saved = Settings.Get("accent", DefaultAccent);
             if (System.Text.RegularExpressions.Regex.IsMatch(saved, "^#[0-9A-Fa-f]{6}$")) Accent = Hex(saved);
             app.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(Styles));
@@ -67,6 +68,23 @@ namespace SleepTimer
 <ResourceDictionary xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
  xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
  <Style TargetType='Window'><Setter Property='Foreground' Value='{DynamicResource TextBrush}'/><Setter Property='FontFamily' Value='Segoe UI'/><Setter Property='FontSize' Value='14'/></Style>
+ <Style TargetType='ToolTip'>
+  <Setter Property='Background' Value='{DynamicResource SurfaceBrush}'/>
+  <Setter Property='Foreground' Value='{DynamicResource TextBrush}'/>
+  <Setter Property='BorderBrush' Value='{DynamicResource BorderBrush}'/>
+  <Setter Property='FontFamily' Value='Segoe UI'/><Setter Property='FontSize' Value='12'/>
+  <Setter Property='Padding' Value='10,7'/><Setter Property='HasDropShadow' Value='False'/>
+  <Setter Property='UseLayoutRounding' Value='True'/><Setter Property='SnapsToDevicePixels' Value='True'/>
+  <Setter Property='ContentTemplate'><Setter.Value><DataTemplate>
+   <TextBlock Text='{Binding}' TextWrapping='Wrap' MaxWidth='300'/>
+  </DataTemplate></Setter.Value></Setter>
+  <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='ToolTip'>
+   <Border Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}'
+    BorderThickness='1' CornerRadius='6' Padding='{TemplateBinding Padding}'>
+    <ContentPresenter Content='{TemplateBinding Content}' ContentTemplate='{TemplateBinding ContentTemplate}'/>
+   </Border>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
  <Style TargetType='TextBlock'>
   <Setter Property='FontFamily' Value='Segoe UI'/>
  </Style>
@@ -293,6 +311,7 @@ namespace SleepTimer
             public Color Color;
             public double Dpi, Width;
             public bool Bold;
+            public Typeface Typeface;
             public FormattedText Drawing;
         }
 
@@ -422,7 +441,7 @@ namespace SleepTimer
                     new Pen(Theme.Brush(Theme.Blend(Theme.Bg, Theme.Blend(Theme.Border, color, .3), opacity)), 1), hourSectors[i]);
             }
             DrawText(g, Title, center.Y - 96, 12, Theme.Second, true);
-            DrawText(g, DisplayTime, center.Y - 66, 45.3, Theme.Text);
+            DrawText(g, DisplayTime, center.Y - 66, 45.3, Theme.Text, counter: true);
             DrawText(g, Sub, center.Y + 51, 14, Theme.Second);
         }
         void CacheDial(Point center, Color color)
@@ -452,17 +471,18 @@ namespace SleepTimer
                 hourArtwork[i] = block;
             }
         }
-        void DrawText(DrawingContext g, string text, double y, double size, Color color, bool bold = false)
+        void DrawText(DrawingContext g, string text, double y, double size, Color color, bool bold = false, bool counter = false)
         {
             text = text ?? "";
             double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            var typeface = counter ? TimerFonts.Current.Typeface : bold ? boldFace : normalFace;
             if (!textArtwork.TryGetValue(size, out TextArtwork cached) || cached.Text != text || cached.Color != color
-                || cached.Dpi != dpi || cached.Width != ActualWidth || cached.Bold != bold)
+                || cached.Dpi != dpi || cached.Width != ActualWidth || cached.Bold != bold || cached.Typeface != typeface)
             {
                 var drawing = new FormattedText(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-                    bold ? boldFace : normalFace, size, Theme.Brush(color), dpi)
+                    typeface, size, Theme.Brush(color), dpi)
                 { MaxTextWidth = ActualWidth, TextAlignment = TextAlignment.Center };
-                cached = new TextArtwork { Text = text, Color = color, Dpi = dpi, Width = ActualWidth, Bold = bold, Drawing = drawing };
+                cached = new TextArtwork { Text = text, Color = color, Dpi = dpi, Width = ActualWidth, Bold = bold, Typeface = typeface, Drawing = drawing };
                 textArtwork[size] = cached;
             }
             g.DrawText(cached.Drawing, new Point(0, y));
@@ -613,11 +633,12 @@ namespace SleepTimer
             }
             scroll.ScrollToVerticalOffset(scrollOffset);
         }
-        public void Show(IEnumerable<MenuRow> rows, UIElement anchor = null, bool above = false)
+        public void Show(IEnumerable<MenuRow> rows, UIElement anchor = null, bool above = false, Point? screenPosition = null)
         {
             var entries = rows.ToArray();
             bool overlay = anchor != null && entries.Length > 0 && entries[0].Header;
             SetRows(entries);
+            popup.CustomPopupPlacementCallback = null;
             popup.PlacementTarget = anchor;
             popup.Placement = anchor == null ? PlacementMode.MousePoint : overlay ? PlacementMode.Relative : above ? PlacementMode.Top : PlacementMode.Bottom;
             popup.HorizontalOffset = anchor == null ? -border.Width : overlay ? -1 : 0;
@@ -626,6 +647,22 @@ namespace SleepTimer
             // Measure before opening so the tray popup has a real size on the first show.
             border.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             if (anchor == null) popup.VerticalOffset = -border.DesiredSize.Height;
+            if (screenPosition.HasValue && anchor != null)
+            {
+                // Capture the screen point at the tray click. Never reuse Popup's
+                // cached mouse position after navigating or reopening the menu.
+                Point screen = screenPosition.Value;
+                popup.HorizontalOffset = popup.VerticalOffset = 0;
+                popup.Placement = PlacementMode.Custom;
+                popup.CustomPopupPlacementCallback = (size, target, offset) =>
+                {
+                    Point at = anchor.PointFromScreen(screen);
+                    return new[] {
+                        new CustomPopupPlacement(new Point(at.X - size.Width, at.Y - size.Height), PopupPrimaryAxis.Horizontal),
+                        new CustomPopupPlacement(new Point(at.X - size.Width, at.Y), PopupPrimaryAxis.Horizontal)
+                    };
+                };
+            }
             border.BeginAnimation(UIElement.OpacityProperty, null);
             border.Opacity = 1;
             popup.IsOpen = true;

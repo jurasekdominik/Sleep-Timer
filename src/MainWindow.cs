@@ -59,6 +59,7 @@ namespace SleepTimer
         readonly TranslateTransform modeSlide = new TranslateTransform();
         Canvas mode;
         ColorPicker colorPicker;
+        Window fontGallery;
         PowerAction action, quickAction;
         int clockMinute, awakeMinutes, lastQuickMinutes, trayPage, selectedTab;
         double awakeEnd;
@@ -67,6 +68,14 @@ namespace SleepTimer
         string iconKey;
         IntPtr trayHandle;
         HwndSource source;
+        const int ShortcutId = 0x1230;
+        static readonly string[] ShortcutNames = { "hotkey_toggle", "hotkey_quick" };
+        readonly Shortcut[] shortcuts = new Shortcut[2];
+        readonly bool[] shortcutRegistered = new bool[2];
+        readonly TextBox[] shortcutFields = new TextBox[2];
+        readonly TextBlock shortcutNote = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
+        int recordingShortcut = -1;
+        Point trayClick;
         public bool TestMode { get; set; }
 
         public MainWindow()
@@ -84,7 +93,9 @@ namespace SleepTimer
             awakeMinutes = Settings.Get("awake", false) ? -1 : 0;
             screenOn = Settings.Get("awake_screen", false);
             if (startupSwitch.IsChecked == true) Startup.Set(true);
-            Title = "Sleep Timer"; SizeToContent = SizeToContent.WidthAndHeight;
+            Title = "Sleep Timer";
+            TaskbarItemInfo = new System.Windows.Shell.TaskbarItemInfo();
+            SizeToContent = SizeToContent.WidthAndHeight;
             root.Width = 368; root.Height = 508; root.Background = Theme.Brush(Theme.Bg);
             ResizeMode = ResizeMode.CanMinimize; WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Background = Theme.Brush(Theme.Bg); Content = root;
@@ -119,7 +130,13 @@ namespace SleepTimer
                 else return;
                 e.Handled = true;
             };
-            tray.MouseUp += (s, e) => { if (e.Button == Forms.MouseButtons.Right) Dispatcher.BeginInvoke((Action)ShowTrayMenu); };
+            tray.MouseUp += (s, e) =>
+            {
+                if (e.Button != Forms.MouseButtons.Right) return;
+                var point = Forms.Cursor.Position;
+                trayClick = new Point(point.X, point.Y);
+                Dispatcher.BeginInvoke((Action)ShowTrayMenu);
+            };
             tray.MouseDoubleClick += (s, e) => { if (e.Button == Forms.MouseButtons.Left) Dispatcher.BeginInvoke((Action)ShowWindow); };
             tray.BalloonTipClicked += (s, e) => Dispatcher.BeginInvoke((Action)ShowWindow);
             ticker.Tick += (s, e) => Tick();
@@ -128,6 +145,7 @@ namespace SleepTimer
                 source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
                 source.AddHook(WindowMessage);
                 Native.DarkTitlebar(source.Handle);
+                RegisterShortcuts();
             };
             StateChanged += (s, e) => { if (WindowState == WindowState.Minimized) Hide(); };
             Closing += (s, e) =>
@@ -139,7 +157,7 @@ namespace SleepTimer
             };
             PreviewKeyDown += (s, e) =>
             {
-                if (e.Key != Key.Escape) return;
+                if (recordingShortcut >= 0 || e.Key != Key.Escape) return;
                 if (colorPicker != null && colorPicker.IsVisible) { colorPicker.Close(); e.Handled = true; }
                 else if (settingsOpen) { ToggleSettings(); e.Handled = true; }
             };
@@ -221,18 +239,18 @@ namespace SleepTimer
         {
             Place(settings, new TextBlock { Text = "Settings", FontSize = 15, FontWeight = FontWeights.SemiBold }, 24, 20, 200, 24);
             var tabs = new Canvas { Width = 320, Height = 24 };
-            string[] names = { "GENERAL", "APPEARANCE", "TIMERS" };
+            string[] names = { "GENERAL", "APPEARANCE", "TIMERS", "KEYBINDS" };
             double tabX = 0;
             for (int i = 0; i < names.Length; i++)
             {
                 int tab = i;
-                string spaced = string.Join(" ", names[i].ToCharArray());
+                string spaced = names[i];
                 double width = VisualText.Make(this, spaced, 12, Theme.Text, true).WidthIncludingTrailingWhitespace;
                 tabPositions.Add(tabX); tabWidths.Add(width);
                 var b = new Button { Content = spaced, FontSize = 12, FontWeight = FontWeights.SemiBold, Width = width + 4, Height = 17,
                     Style = (Style)FindResource("TextButton"), HorizontalContentAlignment = HorizontalAlignment.Left };
                 b.Click += (s, e) => SelectTab(tab); tabButtons.Add(b); Place(tabs, b, tabX, 0);
-                tabX += width + 22;
+                tabX += width + 15;
             }
             tabUnderline.RenderTransform = tabSlide;
             tabUnderline.SetResourceReference(Border.BackgroundProperty, "AccentBrush");
@@ -254,7 +272,10 @@ namespace SleepTimer
                 Place(help, right, 180, 12 + i * 20, 120, 20);
             }
             var appearance = (Canvas)Card(1, 88, 160).Child;
-            Place(appearance, Label("Accent colour"), 20, 16, 280, 24);
+            Place(appearance, Label("Accent colour"), 20, 16, 180, 24);
+            var fonts = new Button { Content = "Fonts…", FontSize = 12, Height = 26, Padding = new Thickness(8, 2, 8, 2), ToolTip = "Compare six Windows font variations for the timer" };
+            Place(appearance, fonts, 220, 14, 80, 26);
+            fonts.Click += (s, e) => OpenFontGallery();
             Place(appearance, accentNote, 20, 38, 280, 18);
             string[] colors = { "#0CD29D", "#BADC58", "#FFB142", "#FF793F", "#FD79A8", "#8C7AE6", "#A29BFE", "#34ACE0" };
             for (int i = 0; i < colors.Length; i++)
@@ -299,8 +320,135 @@ namespace SleepTimer
             Place(timerCard, quickNote, 16, 144, 288, 20);
             customScroll.Content = customRows;
             Place(timerCard, customScroll, 16, 176, 288, 32);
+            BuildShortcutSettings();
             SelectTab(0); RefreshQuickTimers(); AccentNote(); AddFooter(settings);
         }
+        void BuildShortcutSettings()
+        {
+            var panel = (Canvas)Card(3, 88, 252).Child;
+            Place(panel, Label("Global keybinds"), 20, 16, 280, 24);
+            Place(panel, Label("Work even when the app is in the tray.", 12, true), 20, 44, 280, 20);
+            string[] labels = { "Start / Cancel", "Start last used quick timer" };
+            for (int i = 0; i < shortcuts.Length; i++)
+            {
+                int index = i;
+                Shortcut.TryCreate(Settings.Get(ShortcutNames[i] + "_modifiers", 0), Settings.Get(ShortcutNames[i] + "_key", 0), out shortcuts[i]);
+                var input = new TextBox { Width = 280, Height = 32, IsReadOnly = true, IsReadOnlyCaretVisible = false,
+                    Text = ShortcutText(shortcuts[i]), ToolTip = "Click, then press a key with Ctrl, Alt or Win. Delete to unbind; Escape to keep the current binding." };
+                shortcutFields[i] = input;
+                Place(panel, Label(labels[i], 12, true), 20, 76 + i * 68, 280, 20);
+                Place(panel, input, 20, 100 + i * 68);
+                input.GotKeyboardFocus += (s, e) =>
+                {
+                    recordingShortcut = index; UnregisterShortcuts();
+                    input.Text = "Press a key combination…";
+                };
+                input.LostKeyboardFocus += (s, e) =>
+                {
+                    recordingShortcut = -1; input.Text = ShortcutText(shortcuts[index]); RegisterShortcuts();
+                };
+                input.PreviewKeyDown += (s, e) => CaptureShortcut(index, e);
+            }
+            shortcutNote.Text = "Click a field to bind · Delete to clear";
+            shortcutNote.SetResourceReference(TextBlock.ForegroundProperty, "FaintBrush");
+            Place(panel, shortcutNote, 20, 208, 280, 40);
+        }
+        static string ShortcutText(Shortcut shortcut)
+        {
+            if (!shortcut.IsBound) return "Unbound";
+            string text = "";
+            if ((shortcut.Modifiers & 2) != 0) text += "Ctrl + ";
+            if ((shortcut.Modifiers & 1) != 0) text += "Alt + ";
+            if ((shortcut.Modifiers & 4) != 0) text += "Shift + ";
+            if ((shortcut.Modifiers & 8) != 0) text += "Win + ";
+            return text + new KeyConverter().ConvertToString(KeyInterop.KeyFromVirtualKey(shortcut.Key));
+        }
+        void ShortcutError(string text)
+        {
+            shortcutNote.Text = text;
+            shortcutNote.SetResourceReference(TextBlock.ForegroundProperty, "DangerBrush");
+        }
+        void CaptureShortcut(int index, KeyEventArgs e)
+        {
+            Key key = e.Key == Key.System ? e.SystemKey : e.Key;
+            if (key == Key.Tab) return;
+            e.Handled = true;
+            if (e.IsRepeat) return;
+            if (key == Key.Escape) { Keyboard.ClearFocus(); return; }
+            if (key == Key.LeftCtrl || key == Key.RightCtrl || key == Key.LeftAlt || key == Key.RightAlt
+                || key == Key.LeftShift || key == Key.RightShift || key == Key.LWin || key == Key.RWin) return;
+            Shortcut binding = default;
+            if (key != Key.Delete && key != Key.Back)
+            {
+                var keys = Keyboard.Modifiers;
+                int modifiers = ((keys & ModifierKeys.Alt) != 0 ? 1 : 0) | ((keys & ModifierKeys.Control) != 0 ? 2 : 0)
+                    | ((keys & ModifierKeys.Shift) != 0 ? 4 : 0) | ((keys & ModifierKeys.Windows) != 0 ? 8 : 0);
+                if (!Shortcut.TryCreate(modifiers, KeyInterop.VirtualKeyFromKey(key), out binding))
+                { ShortcutError("Use a key with Ctrl, Alt or Win."); return; }
+            }
+            if (SetShortcut(index, binding)) Keyboard.ClearFocus();
+        }
+        bool SetShortcut(int index, Shortcut binding)
+        {
+            if (binding.Matches(shortcuts[1 - index]))
+            { ShortcutError("The other action already uses that keybind."); return false; }
+            var previous = shortcuts[index];
+            UnregisterShortcuts(); shortcuts[index] = binding; RegisterShortcuts();
+            if (binding.IsBound && !shortcutRegistered[index])
+            {
+                string error = shortcutNote.Text;
+                UnregisterShortcuts(); shortcuts[index] = previous; RegisterShortcuts();
+                ShortcutError(error);
+                if (recordingShortcut >= 0) UnregisterShortcuts();
+                return false;
+            }
+            Settings.Set(ShortcutNames[index] + "_key", binding.Key);
+            Settings.Set(ShortcutNames[index] + "_modifiers", binding.Modifiers);
+            shortcutFields[index].Text = ShortcutText(binding);
+            if (recordingShortcut >= 0) UnregisterShortcuts();
+            return true;
+        }
+        void RegisterShortcuts()
+        {
+            if (source == null || disposed) return;
+            shortcutNote.Text = "Click a field to bind · Delete to clear";
+            shortcutNote.SetResourceReference(TextBlock.ForegroundProperty, "FaintBrush");
+            for (int i = 0; i < shortcuts.Length; i++)
+            {
+                if (!shortcuts[i].IsBound || shortcutRegistered[i]) continue;
+                shortcutRegistered[i] = Native.RegisterHotKey(source.Handle, ShortcutId + i,
+                    (uint)(shortcuts[i].Modifiers | 0x4000), (uint)shortcuts[i].Key); // MOD_NOREPEAT
+                if (!shortcutRegistered[i]) ShortcutError(ShortcutText(shortcuts[i]) + " is unavailable. Choose another keybind.");
+            }
+        }
+        void UnregisterShortcuts()
+        {
+            if (source == null) return;
+            for (int i = 0; i < shortcuts.Length; i++)
+            {
+                if (shortcutRegistered[i]) Native.UnregisterHotKey(source.Handle, ShortcutId + i);
+                shortcutRegistered[i] = false;
+            }
+        }
+        int LastQuickMinutes => lastQuickMinutes >= 1 && lastQuickMinutes <= 1440 ? lastQuickMinutes : 30;
+        void RunShortcut(int index)
+        {
+            if (disposed || executing || recordingShortcut >= 0) return;
+            string message;
+            if (index == 0 && countdown.State != TimerState.Idle)
+            {
+                Cancel(); message = action.Label + " timer cancelled.";
+            }
+            else
+            {
+                if (index == 0) StartPause(); else if (index == 1) StartQuickTimer(LastQuickMinutes); else return;
+                message = (index == 1 ? "Quick timer started: " : "Timer started: ") + action.Label
+                    + " in " + TimeText.Clock(countdown.Remaining) + ".";
+            }
+            tray.BalloonTipTitle = "Sleep Timer"; tray.BalloonTipText = message; tray.BalloonTipIcon = Forms.ToolTipIcon.Info;
+            if (!TestMode) tray.ShowBalloonTip(5000);
+        }
+
         int TimingValue(int kind) => kind == 0 ? face.CircleMilliseconds : kind == 1 ? face.CounterMilliseconds : hourStop.HoldMilliseconds;
         void AddAnimationInput(Canvas card, string label, TextBox input, double y, int kind)
         {
@@ -421,6 +569,52 @@ namespace SleepTimer
             clockField.IsHitTestVisible = clockMode;
             if (!clockField.IsKeyboardFocusWithin) clockField.Text = TimeText.HourMinute(clockMinute);
         }
+        void OpenFontGallery()
+        {
+            if (fontGallery != null) { fontGallery.Activate(); return; }
+            var gallery = new Window { Owner = this, Title = "Timer font", Width = 400, SizeToContent = SizeToContent.Height,
+                ResizeMode = ResizeMode.NoResize, WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Background = Theme.Brush(Theme.Bg), ShowInTaskbar = false, UseLayoutRounding = true, SnapsToDevicePixels = true };
+            var panel = new StackPanel { Margin = new Thickness(16) };
+            panel.Children.Add(Label("Choose a timer font", 16));
+            var choices = new List<Button>();
+            foreach (var font in TimerFonts.All)
+            {
+                var row = new Grid();
+                row.ColumnDefinitions.Add(new ColumnDefinition());
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(148) });
+                var name = Label(font.Name, 12); row.Children.Add(name);
+                var sample = new TextBlock { Text = "01:30:00", FontSize = 26, FontFamily = font.Typeface.FontFamily,
+                    FontWeight = font.Typeface.Weight, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+                Grid.SetColumn(sample, 1); row.Children.Add(sample);
+                var choice = new Button { Content = row, Height = 56, Margin = new Thickness(0, 8, 0, 0), Padding = new Thickness(10, 4, 10, 4),
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch, Tag = font };
+                choice.BorderBrush = Theme.Brush(font == TimerFonts.Current ? Theme.Accent : Theme.Border);
+                choice.Click += (s, e) =>
+                {
+                    ApplyTimerFont(font.Key);
+                    foreach (var button in choices) button.BorderBrush = Theme.Brush(button.Tag == TimerFonts.Current ? Theme.Accent : Theme.Border);
+                };
+                choices.Add(choice); panel.Children.Add(choice);
+            }
+            var note = Label("Changes timer digits only. Other text stays Segoe UI.", 12, true);
+            note.TextWrapping = TextWrapping.Wrap; note.Margin = new Thickness(0, 12, 0, 0); panel.Children.Add(note);
+            var done = new Button { Content = "Done", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
+            done.Click += (s, e) => gallery.Close(); panel.Children.Add(done);
+            gallery.Content = new ThemedScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, MaxHeight = Math.Max(240, SystemParameters.WorkArea.Height - 80) };
+            gallery.PreviewKeyDown += (s, e) => { if (e.Key == Key.Escape) { gallery.Close(); e.Handled = true; } };
+            gallery.SourceInitialized += (s, e) => Native.DarkTitlebar(new WindowInteropHelper(gallery).Handle);
+            gallery.Closed += (s, e) => fontGallery = null;
+            fontGallery = gallery; gallery.Show();
+        }
+        void ApplyTimerFont(string key)
+        {
+            TimerFonts.Current = TimerFonts.Find(key);
+            Settings.Set("timer_font", TimerFonts.Current.Key);
+            face.InvalidateVisual();
+        }
+
         void OpenColorHelper()
         {
             if (colorPicker != null && colorPicker.IsVisible) return;
@@ -632,7 +826,7 @@ namespace SleepTimer
             if (!idle) menu.Add(new MenuRow { Text = countdown.State == TimerState.Running ? "Pause" : "Resume", Enabled = !executing, Click = StartPause });
             else
             {
-                int minutes = quickTimers.All.Contains(lastQuickMinutes) ? lastQuickMinutes : 30;
+                int minutes = LastQuickMinutes;
                 menu.Add(new MenuRow { Separator = true });
                 menu.Add(new MenuRow { Text = "Quick start", Right = TimeText.Human(minutes * 60), Enabled = !executing, Click = () => StartQuickTimer(minutes) });
             }
@@ -644,7 +838,7 @@ namespace SleepTimer
         {
             if (trayMenu.Visible || trayMenu.JustClosed || disposed) return;
             Native.SetForegroundWindow(new WindowInteropHelper(this).Handle);
-            trayPage = 0; trayMenu.Show(TrayRows());
+            trayPage = 0; trayMenu.Show(TrayRows(), this, screenPosition: trayClick);
         }
         void SetAwake(int minutes)
         {
@@ -702,7 +896,11 @@ namespace SleepTimer
                 face.Title = state == TimerState.Running ? action.RunTitle : "PAUSED"; face.Time = TimeText.Clock(seconds);
                 face.Sub = state == TimerState.Running ? action.At + " " + DateTimeOffset.Now.AddSeconds(seconds).ToLocalTime().ToString("HH:mm") : "Resume to continue";
             }
-            Title = face.Time + " · " + (idle ? clockMode ? "Scheduled" : "Ready" : state == TimerState.Running ? "Running" : "Paused");
+            // Windows controls thumbnail width. Keep the header short enough to
+            // show the full time; expose action and state in the shell tooltip.
+            Title = face.Time;
+            TaskbarItemInfo.Description = face.Time + " · " + action.Label + " · "
+                + (idle ? clockMode ? "Scheduled" : "Ready" : state == TimerState.Running ? "Running" : "Paused");
             face.Tone = TimerStatus.Tone(state, seconds); face.UpdatePosition(seconds, animate, state == TimerState.Running);
             // Tray IPC, menus and unrelated controls refresh on the regular status tick.
             if (dialOnly) return;
@@ -798,6 +996,15 @@ namespace SleepTimer
         void Quit() { quitting = true; Close(); }
         IntPtr WindowMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
+            if (msg == 0x0312)
+            {
+                int index = (int)wParam - ShortcutId;
+                if (index >= 0 && index < shortcuts.Length && shortcutRegistered[index]
+                    && shortcuts[index].MatchesMessage(lParam.ToInt64()))
+                {
+                    RunShortcut(index); handled = true;
+                }
+            }
             if (msg == 0x0112)
             {
                 int command = (int)wParam & 0xFFF0;
@@ -812,9 +1019,10 @@ namespace SleepTimer
             SaveDuration(); disposed = true;
             ticker.Stop(); aborted?.Stop();
             CompositionTarget.Rendering -= RenderWheelView; wheelViewPending = false;
+            UnregisterShortcuts();
             source?.RemoveHook(WindowMessage);
             face.Snap(0);
-            trayMenu.Dispose(); awakeMenu.Dispose(); colorPicker?.Close();
+            trayMenu.Dispose(); awakeMenu.Dispose(); colorPicker?.Close(); fontGallery?.Close();
             tray.Visible = false; tray.Icon?.Dispose(); tray.Dispose();
             if (trayHandle != IntPtr.Zero) { Native.DestroyIcon(trayHandle); trayHandle = IntPtr.Zero; }
             Native.KeepAwake(false, false);

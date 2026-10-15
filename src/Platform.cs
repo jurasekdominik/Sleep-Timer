@@ -20,6 +20,11 @@ namespace SleepTimer
         [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr handle);
         [DllImport("kernel32.dll")] public static extern bool SetDllDirectory(string path);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, string l);
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool RegisterHotKey(IntPtr window, int id, uint modifiers, uint key);
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool UnregisterHotKey(IntPtr window, int id);
+
         public static void DarkTitlebar(IntPtr hwnd)
         {
             try { int on = 1; DwmSetWindowAttribute(hwnd, 20, ref on, 4); } catch { }
