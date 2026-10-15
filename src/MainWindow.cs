@@ -40,12 +40,16 @@ namespace SleepTimer
         readonly TextBox accentField = new TextBox { MaxLength = 7, Width = 90 };
         readonly TextBox circleDuration = new TextBox { MaxLength = 5, TextAlignment = TextAlignment.Right };
         readonly TextBox counterDuration = new TextBox { MaxLength = 5, TextAlignment = TextAlignment.Right };
+        readonly TextBox hourStopDuration = new TextBox { MaxLength = 5, TextAlignment = TextAlignment.Right };
+        readonly TextBlock hourStopHelp = new TextBlock { FontSize = 12, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
         readonly TextBlock animationNote = new TextBlock { FontSize = 12, Foreground = Theme.Brush(Theme.Faint) };
         readonly TextBlock accentNote = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
         readonly TextBox quickMinutes = new TextBox { MaxLength = 4, Width = 184, Tag = "Minutes", ToolTip = "Whole minutes from 1 to 1440" };
         readonly TextBlock quickNote = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
-        readonly Button customChip = new Button { Width = 288 };
-        readonly PopupMenu trayMenu = new PopupMenu(), awakeMenu = new PopupMenu(160), customMenu = new PopupMenu(288);
+        readonly StackPanel customRows = new StackPanel();
+        readonly ScrollViewer customScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        Border quickCard;
+        readonly PopupMenu trayMenu = new PopupMenu(), awakeMenu = new PopupMenu(160);
         readonly List<FrameworkElement> cards = new List<FrameworkElement>();
         readonly List<Button> tabButtons = new List<Button>();
         readonly List<Button> swatches = new List<Button>();
@@ -69,6 +73,8 @@ namespace SleepTimer
             countdown = new Countdown(Settings.Get("duration", Countdown.DefaultSeconds), () => clock.Elapsed.TotalSeconds);
             face.CircleMilliseconds = AnimationTiming.Normalize(Settings.Get("circle_sweep_ms", AnimationTiming.DefaultMilliseconds));
             face.CounterMilliseconds = AnimationTiming.Normalize(Settings.Get("counter_sweep_ms", AnimationTiming.DefaultMilliseconds));
+            int hold = Settings.Get("hour_stop_ms", 400);
+            hourStop.HoldMilliseconds = hold >= 0 && hold <= AnimationTiming.MaxMilliseconds ? hold : 400;
             clockMode = Settings.Get("clock_mode", false);
             clockMinute = TimeText.DefaultClock(DateTime.Now, countdown.Duration);
             action = PowerAction.Find(Settings.Get("action", "shutdown"));
@@ -237,7 +243,8 @@ namespace SleepTimer
             for (int i = 0; i < rows.GetLength(0); i++)
             {
                 Place(help, Label(rows[i, 0], 12, true), 20, 12 + i * 20, 160, 20);
-                var right = Label(rows[i, 1], 12); right.TextAlignment = TextAlignment.Right;
+                var right = i == rows.GetLength(0) - 1 ? hourStopHelp : Label(rows[i, 1], 12); right.TextAlignment = TextAlignment.Right;
+                if (right == hourStopHelp) right.Text = hourStop.HoldMilliseconds + " ms";
                 Place(help, right, 180, 12 + i * 20, 120, 20);
             }
             var appearance = (Canvas)Card(1, 88, 160).Child;
@@ -263,13 +270,15 @@ namespace SleepTimer
                 if (!hex.StartsWith("#")) hex = "#" + hex;
                 if (System.Text.RegularExpressions.Regex.IsMatch(hex, "^#[0-9A-Fa-f]{6}$")) ApplyAccent(Theme.Hex(hex), true);
             };
-            var animationCard = (Canvas)Card(1, 264, 160).Child;
+            var animationCard = (Canvas)Card(1, 264, 176).Child;
             Place(animationCard, Label("Animation duration"), 20, 12, 280, 24);
-            AddAnimationInput(animationCard, "Circle sweep", circleDuration, 44, true);
-            AddAnimationInput(animationCard, "Numerical counter", counterDuration, 84, false);
+            AddAnimationInput(animationCard, "Circle sweep", circleDuration, 40, 0);
+            AddAnimationInput(animationCard, "Numerical counter", counterDuration, 76, 1);
+            AddAnimationInput(animationCard, "Whole-hour stop", hourStopDuration, 112, 2);
             animationNote.Text = "Enter to save · smaller = faster · 0 = instant";
-            Place(animationCard, animationNote, 20, 132, 280, 18);
-            var timerCard = (Canvas)Card(2, 88, 224).Child;
+            Place(animationCard, animationNote, 20, 148, 280, 18);
+            quickCard = Card(2, 88, 224);
+            var timerCard = (Canvas)quickCard.Child;
             Place(timerCard, Label("Quick timers"), 16, 16, 288, 24);
             Place(timerCard, Label("Start from the tray using the selected action.", 12, true), 16, 48, 288, 20);
             Place(timerCard, Label("Built in: 30 min, 1 h, 2 h, 4 h", 12, true), 16, 72, 288, 20);
@@ -278,53 +287,55 @@ namespace SleepTimer
             Place(timerCard, add, 208, 104);
             add.Click += (s, e) => AddQuickTimer();
             quickMinutes.KeyDown += (s, e) => { if (e.Key == Key.Enter) { AddQuickTimer(); e.Handled = true; } };
-            quickNote.Text = "Enter 1–1440 minutes"; quickNote.Foreground = Theme.Brush(Theme.Faint);
+            quickNote.Text = "Enter 1–1440 minutes"; quickNote.SetResourceReference(TextBlock.ForegroundProperty, "FaintBrush");
             Place(timerCard, quickNote, 16, 144, 288, 20);
-            customChip.Style = (Style)FindResource("ChipButton");
-            Place(timerCard, customChip, 16, 176, 288, 32);
-            customChip.Click += (s, e) => customMenu.Show(quickTimers.Custom.Select(m => new MenuRow
-            {
-                Text = QuickTimers.Label(m), Right = "Remove", Click = () =>
-                {
-                    quickTimers.Remove(m); Settings.Set("quick_timers", quickTimers.Save()); RefreshQuickTimers();
-                }
-            }), customChip);
+            customScroll.Content = customRows;
+            Place(timerCard, customScroll, 16, 176, 288, 32);
             SelectTab(0); RefreshQuickTimers(); AccentNote(); AddFooter(settings);
         }
-        void AddAnimationInput(Canvas card, string label, TextBox input, double y, bool circle)
+        int TimingValue(int kind) => kind == 0 ? face.CircleMilliseconds : kind == 1 ? face.CounterMilliseconds : hourStop.HoldMilliseconds;
+        void AddAnimationInput(Canvas card, string label, TextBox input, double y, int kind)
         {
-            Place(card, Label(label), 20, y, 168, 32);
-            input.Text = (circle ? face.CircleMilliseconds : face.CounterMilliseconds).ToString(CultureInfo.InvariantCulture);
-            input.ToolTip = "0–10000 milliseconds. Default: 600 ms. Press Enter or leave the field to save.";
-            Place(card, input, 196, y, 80, 32);
-            Place(card, Label("ms", 12, true), 284, y, 24, 32);
-            input.LostKeyboardFocus += (s, e) => CommitAnimationInput(input, circle);
+            var row = new Grid { Height = 32 };
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });
+            row.Children.Add(Label(label));
+            input.Text = TimingValue(kind).ToString(CultureInfo.InvariantCulture);
+            input.Height = 32;
+            input.ToolTip = "0–10000 milliseconds. Default: " + (kind == 2 ? "400" : "600") + " ms. Press Enter or leave the field to save.";
+            Grid.SetColumn(input, 1); row.Children.Add(input);
+            var unit = Label("ms", 12, true); unit.Margin = new Thickness(8, 0, 0, 0);
+            Grid.SetColumn(unit, 2); row.Children.Add(unit);
+            Place(card, row, 20, y, 280, 32);
+            input.LostKeyboardFocus += (s, e) => CommitAnimationInput(input, kind);
             input.KeyDown += (s, e) =>
             {
-                if (e.Key == Key.Enter) { CommitAnimationInput(input, circle); e.Handled = true; }
+                if (e.Key == Key.Enter) { CommitAnimationInput(input, kind); e.Handled = true; }
                 else if (e.Key == Key.Escape)
                 {
-                    input.Text = (circle ? face.CircleMilliseconds : face.CounterMilliseconds).ToString(CultureInfo.InvariantCulture);
-                    CommitAnimationInput(input, circle); e.Handled = true;
+                    input.Text = TimingValue(kind).ToString(CultureInfo.InvariantCulture);
+                    CommitAnimationInput(input, kind); e.Handled = true;
                 }
             };
         }
-        void CommitAnimationInput(TextBox input, bool circle)
+        void CommitAnimationInput(TextBox input, int kind)
         {
             if (!AnimationTiming.TryParse(input.Text.Trim(), out int milliseconds))
             {
-                input.BorderBrush = Theme.Brush(Theme.Danger);
+                input.SetResourceReference(TextBox.BorderBrushProperty, "DangerBrush");
                 animationNote.Text = "Use a whole number from 0 to 10000 ms.";
-                animationNote.Foreground = Theme.Brush(Theme.Danger);
+                animationNote.SetResourceReference(TextBlock.ForegroundProperty, "DangerBrush");
                 return;
             }
-            if (circle) face.CircleMilliseconds = milliseconds;
-            else face.CounterMilliseconds = milliseconds;
-            Settings.Set(circle ? "circle_sweep_ms" : "counter_sweep_ms", milliseconds);
+            if (kind == 0) face.CircleMilliseconds = milliseconds;
+            else if (kind == 1) face.CounterMilliseconds = milliseconds;
+            else { hourStop.HoldMilliseconds = milliseconds; hourStop.Reset(); hourStopHelp.Text = milliseconds + " ms"; }
+            Settings.Set(kind == 0 ? "circle_sweep_ms" : kind == 1 ? "counter_sweep_ms" : "hour_stop_ms", milliseconds);
             input.Text = milliseconds.ToString(CultureInfo.InvariantCulture);
             input.SetResourceReference(TextBox.BorderBrushProperty, "BorderBrush");
             animationNote.Text = "Enter to save · smaller = faster · 0 = instant";
-            animationNote.Foreground = Theme.Brush(Theme.Faint);
+            animationNote.SetResourceReference(TextBlock.ForegroundProperty, "FaintBrush");
         }
 
         static void SwitchRow(Canvas parent, string title, string note, ToggleButton toggle, double y)
@@ -477,21 +488,41 @@ namespace SleepTimer
         void AddQuickTimer()
         {
             if (!QuickTimers.TryMinutes(quickMinutes.Text.Trim(), out int minutes))
-            { quickNote.Text = "Use a whole number from 1 to 1440 minutes."; quickNote.Foreground = Theme.Brush(Theme.Danger); }
+            { quickNote.Text = "Use a whole number from 1 to 1440 minutes."; quickNote.SetResourceReference(TextBlock.ForegroundProperty, "DangerBrush"); }
             else if (!quickTimers.Add(minutes))
-            { quickNote.Text = "That timer is already in the quick menu."; quickNote.Foreground = Theme.Brush(Theme.Second); }
+            { quickNote.Text = "That timer is already in the quick menu."; quickNote.SetResourceReference(TextBlock.ForegroundProperty, "SecondBrush"); }
             else
             {
                 Settings.Set("quick_timers", quickTimers.Save()); quickMinutes.Clear();
-                quickNote.Text = "Added " + QuickTimers.Label(minutes) + "."; quickNote.Foreground = Theme.Brush(Theme.Accent);
+                quickNote.Text = "Added " + QuickTimers.Label(minutes) + "."; quickNote.SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
                 RefreshQuickTimers();
             }
         }
         void RefreshQuickTimers()
         {
-            int count = quickTimers.Custom.Count();
-            customChip.Content = count == 0 ? "No custom timers" : "Custom timers (" + count + ")";
-            customChip.IsEnabled = count > 0;
+            customRows.Children.Clear();
+            int[] timers = quickTimers.Custom.ToArray();
+            if (timers.Length == 0)
+            {
+                var empty = Label("No custom timers", 12, true); empty.Height = 32;
+                customRows.Children.Add(empty);
+            }
+            foreach (int minutes in timers)
+            {
+                var row = new Grid { Height = 36 };
+                row.ColumnDefinitions.Add(new ColumnDefinition());
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                row.Children.Add(Label(QuickTimers.Label(minutes)));
+                var remove = new Button { Content = "Remove", Height = 28, Padding = new Thickness(10, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center,
+                    ToolTip = "Remove " + QuickTimers.Label(minutes) };
+                remove.Click += (s, e) =>
+                {
+                    quickTimers.Remove(minutes); Settings.Set("quick_timers", quickTimers.Save()); RefreshQuickTimers();
+                };
+                Grid.SetColumn(remove, 1); row.Children.Add(remove); customRows.Children.Add(row);
+            }
+            customScroll.Height = Math.Min(160, Math.Max(32, timers.Length * 36));
+            quickCard.Height = 192 + customScroll.Height;
             if (trayMenu.Visible) trayMenu.SetRows(TrayRows());
         }
         void ApplyAccent(Color color) => ApplyAccent(color, false);
@@ -502,8 +533,14 @@ namespace SleepTimer
             Settings.Set("accent", hex);
             if (!fromField) { syncing = true; accentField.Text = hex; syncing = false; }
             AccentNote(); iconKey = null; SelectTab(selectedTab); SyncMode(false); UpdateView();
-            foreach (var visual in main.Children.OfType<FrameworkElement>().Concat(settings.Children.OfType<FrameworkElement>())) visual.InvalidateVisual();
-            picker.InvalidateVisual(); ((GearMark)gear.Content).InvalidateVisual();
+            RefreshQuickTimers();
+            InvalidateTree(root);
+        }
+        static void InvalidateTree(DependencyObject element)
+        {
+            if (element is UIElement visual) visual.InvalidateVisual();
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(element); i++)
+                InvalidateTree(VisualTreeHelper.GetChild(element, i));
         }
         void AccentNote()
         {
@@ -738,7 +775,7 @@ namespace SleepTimer
             ticker.Stop(); aborted?.Stop();
             source?.RemoveHook(WindowMessage);
             face.Snap(0);
-            trayMenu.Dispose(); awakeMenu.Dispose(); customMenu.Dispose(); colorPicker?.Close();
+            trayMenu.Dispose(); awakeMenu.Dispose(); colorPicker?.Close();
             tray.Visible = false; tray.Icon?.Dispose(); tray.Dispose();
             if (trayHandle != IntPtr.Zero) { Native.DestroyIcon(trayHandle); trayHandle = IntPtr.Zero; }
             Native.KeepAwake(false, false);

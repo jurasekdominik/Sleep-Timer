@@ -56,6 +56,7 @@ namespace SleepTimer
             r["BorderBrush"] = Brush(Border); r["AccentBrush"] = Brush(Accent);
             r["Surface2Brush"] = Brush(Blend(Bg, Text, .09));
             r["FaintBrush"] = Brush(Faint);
+            r["DangerBrush"] = Brush(Danger);
             r["DangerSoftBrush"] = Brush(Blend(Bg, Danger, .14));
             r["MenuEdgeBrush"] = Brush(Blend(Border, Blend(Bg, Text, .24), .8));
             r["SoftBrush"] = Brush(Blend(Surface, Accent, .18));
@@ -109,7 +110,7 @@ namespace SleepTimer
    <Border x:Name='box' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}'
     BorderThickness='1' CornerRadius='8'>
     <Grid>
-     <ScrollViewer x:Name='PART_ContentHost' Focusable='False' Margin='0' VerticalAlignment='{TemplateBinding VerticalContentAlignment}'/>
+     <ScrollViewer x:Name='PART_ContentHost' Focusable='False' Margin='{TemplateBinding Padding}' VerticalAlignment='{TemplateBinding VerticalContentAlignment}'/>
      <TextBlock x:Name='hint' Text='{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}' Margin='{TemplateBinding Padding}' VerticalAlignment='Center' Foreground='{DynamicResource FaintBrush}' IsHitTestVisible='False' Visibility='Collapsed'/>
     </Grid>
    </Border>
@@ -409,19 +410,35 @@ namespace SleepTimer
                 Padding = new Thickness(0, 4, 0, 4), Child = new ScrollViewer { Content = items, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 520 } };
             border.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
             border.SetResourceReference(Border.BorderBrushProperty, "MenuEdgeBrush");
+            border.Focusable = true;
+            border.FocusVisualStyle = null;
+            KeyboardNavigation.SetTabNavigation(border, KeyboardNavigationMode.Cycle);
             popup.Child = border;
             popup.Closed += (s, e) => closed.Restart();
             popup.Opened += (s, e) =>
             {
                 border.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160)));
-                items.Children.OfType<Button>().FirstOrDefault(b => b.IsEnabled)?.Focus();
+                // Opening a menu must not paint its first item as selected.
+                border.Focus();
             };
-            border.PreviewKeyDown += (s, e) => { if (e.Key == Key.Escape) { Close(); e.Handled = true; } };
+            border.PreviewKeyDown += (s, e) =>
+            {
+                if (e.Key == Key.Escape) { Close(); e.Handled = true; }
+                else if (e.Key == Key.Down || e.Key == Key.Up)
+                {
+                    var buttons = items.Children.OfType<Button>().Where(b => b.IsEnabled).ToArray();
+                    if (buttons.Length == 0) return;
+                    int index = Array.FindIndex(buttons, b => b.IsKeyboardFocusWithin);
+                    int next = index < 0 ? (e.Key == Key.Down ? 0 : buttons.Length - 1)
+                        : (index + (e.Key == Key.Down ? 1 : buttons.Length - 1)) % buttons.Length;
+                    buttons[next].Focus(); e.Handled = true;
+                }
+            };
         }
         public void SetRows(IEnumerable<MenuRow> rows)
         {
             var next = rows.ToArray();
-            string signature = string.Join("|", next.Select(r => r.Text + "~" + r.Right + "~" + r.Selected + "~" + r.Enabled + "~" + r.Separator + "~" + r.Header));
+            string signature = Theme.Accent.ToString() + "|" + string.Join("|", next.Select(r => r.Text + "~" + r.Right + "~" + r.Selected + "~" + r.Enabled + "~" + r.Separator + "~" + r.Header + "~" + r.Danger));
             if (signature == rowSignature) return;
             rowSignature = signature;
             items.Children.Clear();
@@ -442,12 +459,16 @@ namespace SleepTimer
                 if (row.Header)
                 {
                     label.Foreground = Theme.Brush(Theme.Second);
-                    grid.Margin = new Thickness(16, 7, 16, 7);
+                    grid.Height = 32;
+                    grid.Margin = new Thickness(16, 0, 14, 0);
                     var arrow = new System.Windows.Shapes.Path { Data = Geometry.Parse("M 0,4 L 4,0 L 8,4"),
                         Stroke = Theme.Brush(Theme.Second), StrokeThickness = 1.6, Width = 8, Height = 4, VerticalAlignment = VerticalAlignment.Center,
                         StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round };
                     Grid.SetColumn(arrow, 1); grid.Children.Add(arrow);
-                    items.Children.Add(grid); continue;
+                    var header = new Button { Content = grid, Height = 32, Padding = new Thickness(0),
+                        HorizontalContentAlignment = HorizontalAlignment.Stretch, Style = (Style)Application.Current.FindResource("TextButton") };
+                    header.Click += (s, e) => { Close(); row.Click?.Invoke(); };
+                    items.Children.Add(header); continue;
                 }
                 var button = new Button { Content = grid, IsEnabled = row.Enabled, Tag = row.Danger ? "danger" : null, Style = (Style)Application.Current.FindResource("MenuButton"),
                     Background = row.Selected ? Theme.Brush(Theme.Blend(Theme.Surface, Theme.Accent, .06)) : Brushes.Transparent };
@@ -464,8 +485,9 @@ namespace SleepTimer
             SetRows(entries);
             popup.PlacementTarget = anchor;
             popup.Placement = anchor == null ? PlacementMode.MousePoint : overlay ? PlacementMode.Relative : above ? PlacementMode.Top : PlacementMode.Bottom;
-            popup.HorizontalOffset = anchor == null ? -border.Width : 0;
-            popup.VerticalOffset = anchor == null ? -border.DesiredSize.Height : overlay ? 0 : 4;
+            popup.HorizontalOffset = anchor == null ? -border.Width : overlay ? -1 : 0;
+            // Cancel the border and top padding so the header stays on the closed field baseline.
+            popup.VerticalOffset = anchor == null ? -border.DesiredSize.Height : overlay ? -5 : 4;
             // Measure before opening so the tray popup has a real size on the first show.
             border.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             if (anchor == null) popup.VerticalOffset = -border.DesiredSize.Height;
