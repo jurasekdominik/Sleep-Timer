@@ -158,6 +158,7 @@ namespace SleepTimer
                         WheelAt(window, face, new System.Windows.Point(160, 186));
                         Check(countdown.Duration == 2400, "Wheel over the action selector did not adjust time");
                         countdown.SetDuration(1800); Call(window, "UpdateView", false);
+                        Console.WriteLine("CHECKPOINT: wheel events complete");
                         Call(window, "SetAction", "sleep");
                         var force = Field<ToggleButton>(window, "forceSwitch");
                         Check(force.IsEnabled, "Force-close setting cannot be switched off while Sleep is selected");
@@ -186,12 +187,14 @@ namespace SleepTimer
                         Pump(80); Check(face.Position >= 3360 && face.Position <= 3660, "Backward rollover reversed");
                         Pump(650);
 
+                        Console.WriteLine("CHECKPOINT: default dial animation complete");
                         var circleInput = Field<TextBox>(window, "circleDuration");
                         var textInput = Field<TextBox>(window, "counterDuration");
                         Check(circleInput.Text == "600" && textInput.Text == "600", "Animation defaults changed");
                         circleInput.Text = "120"; Call(window, "CommitAnimationInput", circleInput, true);
                         textInput.Text = "900"; Call(window, "CommitAnimationInput", textInput, false);
                         Check(Settings.Get("circle_sweep_ms", -1) == 120 && Settings.Get("counter_sweep_ms", -1) == 900, "Independent timings were not saved");
+                        Console.WriteLine("CHECKPOINT: reopen for saved durations");
                         var reopened = Open();
                         try
                         {
@@ -199,6 +202,7 @@ namespace SleepTimer
                             Check(reloaded.CircleMilliseconds == 120 && reloaded.CounterMilliseconds == 900, "Timing overrides did not survive reopen");
                         }
                         finally { Close(reopened); }
+                        Console.WriteLine("CHECKPOINT: reopened window closed");
                         window.Activate();
                         face.Snap(1800); face.Time = TimeText.Clock(3600);
                         face.UpdatePosition(3600, true, false); Pump(250);
@@ -224,6 +228,7 @@ namespace SleepTimer
                         circleInput.Text = "600"; Call(window, "CommitAnimationInput", circleInput, true);
                         textInput.Text = "600"; Call(window, "CommitAnimationInput", textInput, false);
 
+                        Console.WriteLine("CHECKPOINT: timing overrides complete");
                         Call(window, "SetMode", true);
                         Check(Field<bool>(window, "clockMode"), "At time mode failed");
                         Check(Field<TextBox>(window, "clockField").Visibility == Visibility.Visible, "Clock field stayed hidden");
@@ -249,6 +254,7 @@ namespace SleepTimer
                         Check(Field<QuickTimers>(window, "quickTimers").All.Contains(90), "Custom quick timer not added");
                         input.Text = "0"; Call(window, "AddQuickTimer");
                         Check(!Field<QuickTimers>(window, "quickTimers").All.Contains(0), "Invalid quick timer accepted");
+                        Console.WriteLine("CHECKPOINT: quick timers complete");
                         var palette = new ColorPicker(Theme.Accent) { Owner = window };
                         palette.Show(); Pump(50); palette.Close();
                     }
