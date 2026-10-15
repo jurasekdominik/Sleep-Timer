@@ -35,10 +35,13 @@ namespace SleepTimer
         static void Check(bool okay, string text) { if (!okay) throw new Exception(text); }
         static void Pump(int milliseconds)
         {
+            // Start newly queued WPF animation clocks before measuring elapsed progress.
+            Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.Render, new Action(() => { }));
             var frame = new DispatcherFrame();
-            var stop = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(milliseconds) };
+            var stop = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(milliseconds) };
             stop.Tick += (s, e) => { stop.Stop(); frame.Continue = false; };
             stop.Start(); Dispatcher.PushFrame(frame);
+            Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.Render, new Action(() => { }));
         }
         static MainWindow Open()
         {
