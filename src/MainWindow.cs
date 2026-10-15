@@ -247,7 +247,7 @@ namespace SleepTimer
             settings.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             settings.RowDefinitions.Add(new RowDefinition());
             pageTitle.Margin = new Thickness(Design.PageEdge); settings.Children.Add(pageTitle);
-            var scroll = new ScrollViewer { Content = settingsBlocks, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            var scroll = new CompactScrollViewer { Content = settingsBlocks, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Padding = new Thickness(Design.PageEdge, 0, Design.PageEdge, Design.PageEdge) };
             Grid.SetRow(scroll, 1); settings.Children.Add(scroll);
             var general = AddBlock(0, "Startup and power");

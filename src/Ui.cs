@@ -237,16 +237,6 @@ namespace SleepTimer
   </ControlTemplate></Setter.Value></Setter>
  </Style>
 
- <Style TargetType='ScrollViewer'>
-  <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='ScrollViewer'>
-   <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width='Auto'/></Grid.ColumnDefinitions>
-    <ScrollContentPresenter x:Name='PART_ScrollContentPresenter' Content='{TemplateBinding Content}' ContentTemplate='{TemplateBinding ContentTemplate}' CanContentScroll='{TemplateBinding CanContentScroll}' Margin='{TemplateBinding Padding}'/>
-    <ScrollBar x:Name='PART_VerticalScrollBar' Grid.Column='1' Width='8' Orientation='Vertical'
-     Visibility='{TemplateBinding ComputedVerticalScrollBarVisibility}' Maximum='{TemplateBinding ScrollableHeight}'
-     ViewportSize='{TemplateBinding ViewportHeight}' Value='{Binding VerticalOffset, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}'/>
-   </Grid>
-  </ControlTemplate></Setter.Value></Setter>
- </Style>
 </ResourceDictionary>";
     }
 
@@ -418,6 +408,15 @@ namespace SleepTimer
         }
     }
 
+    sealed class CompactScrollViewer : ScrollViewer
+    {
+        public override void OnApplyTemplate()
+        {
+            base.OnApplyTemplate();
+            if (GetTemplateChild("PART_VerticalScrollBar") is ScrollBar bar) bar.Width = Design.Gap;
+        }
+    }
+
     sealed class MenuRow
     {
         public string Text, Right;
@@ -441,7 +440,7 @@ namespace SleepTimer
         public PopupMenu(int width = (int)Design.DefaultMenu)
         {
             border = new Border { Width = width, CornerRadius = Design.ControlCorner, BorderThickness = new Thickness(1),
-                Padding = new Thickness(0, Design.Space, 0, Design.Space), Child = new ScrollViewer { Content = items, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = Design.PopupMaxHeight } };
+                Padding = new Thickness(0, Design.Space, 0, Design.Space), Child = new CompactScrollViewer { Content = items, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = Design.PopupMaxHeight } };
             border.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
             border.SetResourceReference(Border.BorderBrushProperty, "MenuEdgeBrush");
             popup.Child = border;
@@ -471,7 +470,7 @@ namespace SleepTimer
         public void SetRows(IEnumerable<MenuRow> rows)
         {
             var next = rows.ToArray();
-            string signature = string.Join("|", next.Select(r => r.Text + "~" + r.Right + "~" + r.Selected + "~" + r.Enabled + "~" + r.Separator + "~" + r.Header));
+            string signature = Theme.Accent.ToString() + string.Join("|", next.Select(r => r.Text + "~" + r.Right + "~" + r.Selected + "~" + r.Enabled + "~" + r.Separator + "~" + r.Header));
             if (signature == rowSignature) return;
             rowSignature = signature;
             items.Children.Clear();

@@ -135,7 +135,9 @@ namespace SleepTimer
                     Settings.Set("circle_sweep_ms", 600); Settings.Set("counter_sweep_ms", 600);
                     var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                     Theme.Init(app);
+                    Console.WriteLine("CHECKPOINT: opening main window");
                     var window = Open();
+                    Console.WriteLine("CHECKPOINT: native wheel and behavior");
                     try
                     {
                         var countdown = Field<Countdown>(window, "countdown");
@@ -241,6 +243,7 @@ namespace SleepTimer
                     }
                     finally { Close(window); }
 
+                    Console.WriteLine("CHECKPOINT: page previews");
                     var visual = Open();
                     try
                     {
@@ -314,6 +317,7 @@ namespace SleepTimer
                         }
                     }
                     finally { Close(visual); }
+                    Console.WriteLine("CHECKPOINT: resource disposal");
                     for (int i = 0; i < 3; i++) { var warm = Open(); Pump(30); Close(warm); }
                     GC.Collect(); GC.WaitForPendingFinalizers(); Pump(100);
                     int baseline = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
@@ -326,6 +330,7 @@ namespace SleepTimer
                     GC.Collect(); GC.WaitForPendingFinalizers(); Pump(150);
                     int final = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
                     Check(final - baseline < 32, "GDI handle growth: " + baseline + " -> " + final);
+                    Console.WriteLine("CHECKPOINT: component gallery");
                     RenderGallery();
                     Console.WriteLine("WPF checks passed; GDI handles " + baseline + " -> " + final);
                     return 0;
