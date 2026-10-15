@@ -40,6 +40,7 @@ namespace SleepTimer
         readonly ToggleButton startupSwitch = new ToggleButton { IsChecked = Settings.Get("start_with_windows", false) };
         readonly ToggleButton forceSwitch = new ToggleButton { IsChecked = Settings.Get("force", true) };
         readonly TextBlock forceNote = new TextBlock { FontSize = Design.Caption, Foreground = Theme.Brush(Theme.Faint) };
+        readonly Button accentButton = new Button { Width = Design.MainActionWidth, HorizontalAlignment = HorizontalAlignment.Left };
         readonly TextBox accentField = new TextBox { MaxLength = 7, Width = Design.InputWidth };
         readonly TextBox circleDuration = new TextBox { MaxLength = 5, TextAlignment = TextAlignment.Right, Width = Design.InputWidth };
         readonly TextBox counterDuration = new TextBox { MaxLength = 5, TextAlignment = TextAlignment.Right, Width = Design.InputWidth };
@@ -270,8 +271,8 @@ namespace SleepTimer
             var colourCells = PairGrid();
             var currentCell = new StackPanel();
             currentCell.Children.Add(new TextBlock { Text = "Current colour", FontSize = Design.Label, Margin = new Thickness(0, 0, 0, Design.Space) });
-            var current = new Button { Content = "Choose colour", Width = Design.MainActionWidth, HorizontalAlignment = HorizontalAlignment.Left, Style = (Style)FindResource("DropdownButton") };
-            current.Click += (s, e) => OpenColorHelper(); currentCell.Children.Add(current); colourCells.Children.Add(currentCell);
+            accentButton.Style = (Style)FindResource("DropdownButton"); accentButton.Content = AccentPreview();
+            accentButton.Click += (s, e) => OpenColorHelper(); currentCell.Children.Add(accentButton); colourCells.Children.Add(currentCell);
             var custom = new StackPanel();
             custom.Children.Add(new TextBlock { Text = "Custom colour", FontSize = Design.Label, Margin = new Thickness(0, 0, 0, Design.Space) });
             accentField.HorizontalAlignment = HorizontalAlignment.Left;
@@ -347,6 +348,14 @@ namespace SleepTimer
                 { input.Text = (circle ? face.CircleMilliseconds : face.CounterMilliseconds).ToString(CultureInfo.InvariantCulture); CommitAnimationInput(input, circle); e.Handled = true; }
             };
         }
+        FrameworkElement AccentPreview()
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(new Border { Width = Design.Icon, Height = Design.Icon, CornerRadius = Design.ControlCorner, Background = Theme.Brush(Theme.Accent),
+                Margin = new Thickness(0, 0, Design.IconGap, 0), VerticalAlignment = VerticalAlignment.Center });
+            row.Children.Add(Label("#" + Theme.Accent.R.ToString("X2") + Theme.Accent.G.ToString("X2") + Theme.Accent.B.ToString("X2")));
+            return row;
+        }
         void CommitAnimationInput(TextBox input, bool circle)
         {
             if (!AnimationTiming.TryParse(input.Text.Trim(), out int milliseconds))
@@ -356,7 +365,9 @@ namespace SleepTimer
             if (circle) face.CircleMilliseconds = milliseconds; else face.CounterMilliseconds = milliseconds;
             Settings.Set(circle ? "circle_sweep_ms" : "counter_sweep_ms", milliseconds); input.Text = milliseconds.ToString(CultureInfo.InvariantCulture);
             input.SetResourceReference(TextBox.BorderBrushProperty, "BorderBrush");
-            animationNote.Text = "Defaults: 600 ms. Values save when you leave a field."; animationNote.Foreground = Theme.Brush(Theme.Faint);
+            bool valid = AnimationTiming.TryParse(circleDuration.Text.Trim(), out _) && AnimationTiming.TryParse(counterDuration.Text.Trim(), out _);
+            animationNote.Text = valid ? "Defaults: 600 ms. Values save when you leave a field." : "Enter a whole number from 0 to 10000 ms.";
+            animationNote.Foreground = Theme.Brush(valid ? Theme.Faint : Theme.Danger);
         }
         void SelectTab(int tab)
         {
@@ -502,6 +513,7 @@ namespace SleepTimer
         void ApplyAccent(Color color, bool fromField)
         {
             Theme.Accent = color; Theme.UpdateResources(Application.Current.Resources);
+            accentButton.Content = AccentPreview();
             string hex = "#" + color.R.ToString("X2") + color.G.ToString("X2") + color.B.ToString("X2");
             Settings.Set("accent", hex);
             if (!fromField) { syncing = true; accentField.Text = hex; syncing = false; }

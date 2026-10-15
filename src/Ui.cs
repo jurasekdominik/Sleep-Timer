@@ -236,6 +236,17 @@ namespace SleepTimer
    </Track>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
+
+ <Style TargetType='ScrollViewer'>
+  <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='ScrollViewer'>
+   <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width='Auto'/></Grid.ColumnDefinitions>
+    <ScrollContentPresenter x:Name='PART_ScrollContentPresenter' Content='{TemplateBinding Content}' ContentTemplate='{TemplateBinding ContentTemplate}' CanContentScroll='{TemplateBinding CanContentScroll}' Margin='{TemplateBinding Padding}'/>
+    <ScrollBar x:Name='PART_VerticalScrollBar' Grid.Column='1' Width='8' Orientation='Vertical'
+     Visibility='{TemplateBinding ComputedVerticalScrollBarVisibility}' Maximum='{TemplateBinding ScrollableHeight}'
+     ViewportSize='{TemplateBinding ViewportHeight}' Value='{Binding VerticalOffset, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}'/>
+   </Grid>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
 </ResourceDictionary>";
     }
 
@@ -471,7 +482,7 @@ namespace SleepTimer
                 grid.ColumnDefinitions.Add(new ColumnDefinition());
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 var label = new TextBlock { Text = row.Text, FontSize = Design.Body, FontWeight = row.Selected ? FontWeights.SemiBold : FontWeights.Normal,
-                    Foreground = Theme.Brush(row.Danger ? Theme.Danger : row.Selected ? Theme.SmallAccent : Theme.Text), VerticalAlignment = VerticalAlignment.Center };
+                    Foreground = Theme.Brush(row.Danger ? Theme.Danger : row.Selected ? Theme.SmallAccent : Theme.Text), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = row.Text };
                 grid.Children.Add(label);
                 if (row.Selected)
                 {

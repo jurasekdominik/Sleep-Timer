@@ -8,7 +8,6 @@ This batch fixes dial-interior and descendant wheel input, timer/status window t
 
 ## Next
 
-- Complete Windows regression and screenshot review for the current batch.
 - Owner checks actual wheel interaction and high-refresh animation feel on Windows.
 
 ## Decisions

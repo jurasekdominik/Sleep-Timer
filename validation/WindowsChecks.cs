@@ -57,7 +57,13 @@ namespace SleepTimer
             root.UpdateLayout();
             int width = (int)Math.Ceiling(root.ActualWidth), height = (int)Math.Ceiling(root.ActualHeight);
             var image = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-            image.Render(root);
+            var frame = new DrawingVisual();
+            using (var g = frame.RenderOpen())
+            {
+                g.DrawRectangle(Theme.Brush(Theme.Bg), null, new Rect(0, 0, width, height));
+                g.DrawRectangle(new VisualBrush(root) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top }, null, new Rect(0, 0, width, height));
+            }
+            image.Render(frame);
             var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(image));
             Directory.CreateDirectory("validation-output");
             string path = Path.Combine("validation-output", name + ".png");
@@ -111,6 +117,8 @@ namespace SleepTimer
             page.Children.Add(menu);
             var tabs = new ModeSelector("Overview", "Details"); page.Children.Add(tabs);
             var window = new Window { Content = page, Width = 580, SizeToContent = SizeToContent.Height, Background = Theme.Brush(Theme.Bg), Foreground = Theme.Brush(Theme.Text), ShowInTaskbar = false };
+            TextOptions.SetTextFormattingMode(page, TextFormattingMode.Display);
+            TextOptions.SetTextRenderingMode(page, TextRenderingMode.ClearType);
             window.Show(); Pump(250); CaptureControl(page, "wpf-gallery"); window.Close();
         }
 
@@ -257,6 +265,10 @@ namespace SleepTimer
                         var toggle = Field<ToggleButton>(visual, "forceSwitch");
                         var thumb = (Border)toggle.Template.FindName("thumb", toggle);
                         Check(((SolidColorBrush)thumb.Background).Color == Colors.White && thumb.Width == Design.ThumbWidth && thumb.Height == Design.ThumbHeight, "Original switch capsule was changed");
+                        var viewer = Field<Grid>(visual, "settings").Children.OfType<ScrollViewer>().Single();
+                        viewer.ScrollToVerticalOffset(viewer.ScrollableHeight); Pump(80);
+                        Check(viewer.VerticalOffset >= viewer.ScrollableHeight - 1, "Settings scrollbar did not follow content");
+                        viewer.ScrollToHome(); Pump(80);
                         Capture(visual, "wpf-settings");
                         Call(visual, "SelectTab", 1); Pump(300);
                         var accentBox = Field<TextBox>(visual, "accentField");
@@ -287,7 +299,7 @@ namespace SleepTimer
                         Pump(200); CaptureControl((FrameworkElement)Field<Popup>(awake, "popup").Child, "wpf-awake-menu"); awake.Close(); Pump(200);
                         var trayPopup = Field<PopupMenu>(visual, "trayMenu");
                         Set(visual, "trayPage", 0);
-                        trayPopup.Show((System.Collections.Generic.List<MenuRow>)Call(visual, "TrayRows"), anchor);
+                        trayPopup.Show((System.Collections.Generic.List<MenuRow>)Call(visual, "TrayRows"));
                         Pump(200); CaptureControl((FrameworkElement)Field<Popup>(trayPopup, "popup").Child, "wpf-tray-menu"); trayPopup.Close(); Pump(200);
                         SendMessage(new WindowInteropHelper(visual).Handle, 0x0112, (IntPtr)0xF100, IntPtr.Zero);
                         var info = new GuiThreadInfo { Size = Marshal.SizeOf(typeof(GuiThreadInfo)) };
