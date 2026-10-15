@@ -319,8 +319,8 @@ namespace SleepTimer
             if (animate && IsVisible)
             {
                 edit.Restart();
-                Animate(PositionProperty, seconds, circle, true);
-                Animate(CounterPositionProperty, seconds, counter, true);
+                Animate(PositionProperty, seconds, circle, true, running);
+                Animate(CounterPositionProperty, seconds, counter, true, running);
             }
             else
             {
@@ -329,12 +329,13 @@ namespace SleepTimer
                 // Each animation has its own clock duration; status refreshes must not interrupt either.
                 if (!holdingCircle)
                 {
-                    if (running && IsVisible) Animate(PositionProperty, seconds, 100, false);
+                    if (running && IsVisible) Animate(PositionProperty, seconds, 100, false, true);
                     else if (seconds != target || !IsVisible) SetPosition(PositionProperty, seconds);
                 }
                 if (!holdingCounter)
                 {
-                    if (seconds != target || !IsVisible || edit.IsRunning) SetPosition(CounterPositionProperty, seconds);
+                    if (running && IsVisible) Animate(CounterPositionProperty, seconds, 100, false, true);
+                    else if (seconds != target || !IsVisible || edit.IsRunning) SetPosition(CounterPositionProperty, seconds);
                 }
                 if (!holdingCircle && !holdingCounter) edit.Reset();
             }
@@ -342,13 +343,22 @@ namespace SleepTimer
             InvalidateVisual();
         }
 
-        void Animate(DependencyProperty property, double seconds, int milliseconds, bool eased)
+        void Animate(DependencyProperty property, double seconds, int milliseconds, bool eased, bool running = false)
         {
             if (milliseconds == 0) { SetPosition(property, seconds); return; }
             double from = (double)GetValue(property);
             var motion = new DoubleAnimation(from, seconds, TimeSpan.FromMilliseconds(milliseconds));
             if (eased) motion.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
             BeginAnimation(property, motion, HandoffBehavior.SnapshotAndReplace);
+            if (running)
+            {
+                // Keep the real countdown moving beneath the edit easing, through the final frame.
+                var elapsed = new DoubleAnimation(0, -milliseconds / 1000d, TimeSpan.FromMilliseconds(milliseconds))
+                {
+                    IsAdditive = true
+                };
+                ApplyAnimationClock(property, elapsed.CreateClock(), HandoffBehavior.Compose);
+            }
         }
         void SetPosition(DependencyProperty property, double seconds)
         {
@@ -361,9 +371,17 @@ namespace SleepTimer
             InvalidateVisual();
         }
 
-        public string DisplayTime => !ClockMode && edit.IsRunning
-            && edit.ElapsedMilliseconds < AnimationTiming.Normalize(CounterMilliseconds)
-            ? TimeText.Clock(Math.Round(CounterPosition / 60) * 60) : Time;
+        public string DisplayTime
+        {
+            get
+            {
+                if (ClockMode) return Time;
+                // Active timers retain seconds throughout the animation and the handoff to normal ticking.
+                if (State != TimerState.Idle) return TimeText.Clock(CounterPosition);
+                bool editing = edit.IsRunning && edit.ElapsedMilliseconds < AnimationTiming.Normalize(CounterMilliseconds);
+                return editing ? TimeText.Clock(Math.Round(CounterPosition / 60) * 60) : Time;
+            }
+        }
 
         protected override void OnRender(DrawingContext g)
         {
@@ -475,7 +493,7 @@ namespace SleepTimer
             popup.Closed += (s, e) => closed.Restart();
             popup.Opened += (s, e) =>
             {
-                border.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160)));
+                // Show at full opacity: starting a fade here briefly exposed the popup before hiding it.
                 // Opening a menu must not paint its first item as selected.
                 border.Focus();
             };
@@ -549,6 +567,8 @@ namespace SleepTimer
             // Measure before opening so the tray popup has a real size on the first show.
             border.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             if (anchor == null) popup.VerticalOffset = -border.DesiredSize.Height;
+            border.BeginAnimation(UIElement.OpacityProperty, null);
+            border.Opacity = 1;
             popup.IsOpen = true;
         }
         public void Close() => popup.IsOpen = false;
