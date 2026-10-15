@@ -50,14 +50,20 @@ namespace SleepTimer
                 var next = Marshal.PtrToStructure<WindowPosition>(position);
                 int width = (next.Flags & 1) != 0 ? rect.Right - rect.Left : next.Width;
                 int height = (next.Flags & 1) != 0 ? rect.Bottom - rect.Top : next.Height;
+                bool resized = width != rect.Right - rect.Left || height != rect.Bottom - rect.Top;
+                if ((next.Flags & 2) != 0 && !resized) return;
                 var point = ScreenPlacement.Above(at.X, at.Y, width, height, info.Work.Left, info.Work.Top, info.Work.Right, info.Work.Bottom);
-                next.X = point.X; next.Y = point.Y; next.Flags &= ~2u; // SWP_NOMOVE
+                next.X = point.X; next.Y = point.Y;
+                // Do not turn WPF's no-op layout updates into fresh move events.
+                if (point.X == rect.Left && point.Y == rect.Top) next.Flags |= 2u;
+                else next.Flags &= ~2u; // SWP_NOMOVE
                 Marshal.StructureToPtr(next, position, false);
             }
             else
             {
                 var point = ScreenPlacement.Above(at.X, at.Y, rect.Right - rect.Left, rect.Bottom - rect.Top,
                     info.Work.Left, info.Work.Top, info.Work.Right, info.Work.Bottom);
+                if (point.X == rect.Left && point.Y == rect.Top) return;
                 SetWindowPos(window, IntPtr.Zero, point.X, point.Y, 0, 0, 0x0015); // no size, z-order or activation
             }
         }

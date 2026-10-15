@@ -275,6 +275,7 @@ namespace SleepTimer
                         Check(!Field<QuickTimers>(window, "quickTimers").All.Contains(0), "Invalid quick timer accepted");
                         var palette = new ColorPicker(Theme.Accent);
                         palette.Show(face); Pump(50); palette.Close();
+                        Console.WriteLine("CHECK: global shortcuts");
                         CheckShortcuts(window);
                     }
                     finally { Close(window); }
@@ -285,6 +286,7 @@ namespace SleepTimer
                         var countdown = Field<Countdown>(visual, "countdown");
                         countdown.SetDuration(10800); Call(visual, "UpdateView", false); Pump(150);
                         Check(((FrameworkElement)visual.Content).ActualHeight >= 508, "Client area clips the footer");
+                        Console.WriteLine("CHECK: font families and weights");
                         Check(AppFonts.All.Length >= 6 && AppFonts.All.Select(font => font.Key).Distinct().Count() == AppFonts.All.Length,
                             "Font choices are missing or duplicate");
                         var installed = Fonts.SystemFontFamilies.Select(font => font.Source).ToArray();
@@ -411,6 +413,7 @@ namespace SleepTimer
                         Set(visual, "trayPage", 0);
                         trayPopup.Show((System.Collections.Generic.List<MenuRow>)Call(visual, "TrayRows"), anchor);
                         Pump(200); CaptureControl((FrameworkElement)Field<Popup>(trayPopup, "popup").Child, "wpf-tray-menu"); trayPopup.Close(); Pump(200);
+                        Console.WriteLine("CHECK: physical tray placement");
                         var screenPoint = visual.PointToScreen(new System.Windows.Point(300, 450));
                         Set(visual, "trayClick", screenPoint); Call(visual, "ShowTrayMenu"); Pump(100);
                         var firstBounds = PopupBounds(trayPopup);
@@ -452,6 +455,7 @@ namespace SleepTimer
                         }
                     }
                     finally { Close(visual); }
+                    Console.WriteLine("CHECK: repeated window disposal");
                     for (int i = 0; i < 3; i++) { var warm = Open(); Pump(30); Close(warm); }
                     GC.Collect(); GC.WaitForPendingFinalizers(); Pump(100);
                     int baseline = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
