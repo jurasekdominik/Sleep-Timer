@@ -30,18 +30,16 @@ namespace SleepTimer
         };
 
         readonly ColorField field = new ColorField { Width = 476, Height = 150 };
-        readonly TextBlock note = new TextBlock { FontSize = 12, Margin = new Thickness(0, 12, 0, 0) };
-        readonly Border sample = new Border { Width = 84, Height = 30, CornerRadius = new CornerRadius(8), Margin = new Thickness(12, 0, 0, 0) };
+        readonly TextBlock note = new TextBlock { FontSize = Design.Caption, Margin = new Thickness(0, Design.BlockPadding, 0, 0) };
+        readonly Border sample = new Border { Width = 84, Height = 30, CornerRadius = Design.CardCorner, Margin = new Thickness(12, 0, 0, 0) };
         public event Action<Color> Picked;
         public ColorPicker(Color current)
         {
             Title = "Accent colour"; Width = 540; SizeToContent = SizeToContent.Height; ResizeMode = ResizeMode.NoResize;
             WindowStartupLocation = WindowStartupLocation.CenterOwner; ShowInTaskbar = false; Background = Theme.Brush(Theme.Bg); Foreground = Theme.Brush(Theme.Text);
-            var panel = new StackPanel { Margin = new Thickness(16) };
-            var tabs = new StackPanel { Orientation = Orientation.Horizontal };
-            var paletteTab = new Button { Content = "PALETTE", Margin = new Thickness(0, 0, 8, 0) };
-            var mixerTab = new Button { Content = "MIXER" };
-            tabs.Children.Add(paletteTab); tabs.Children.Add(mixerTab); panel.Children.Add(tabs);
+            var panel = new StackPanel { Margin = new Thickness(Design.PageEdge) };
+            var tabs = new ModeSelector("Palette", "Mixer") { HorizontalAlignment = HorizontalAlignment.Left };
+            panel.Children.Add(tabs);
             var pages = new Grid { Margin = new Thickness(0, 12, 0, 0), Height = 178 };
             var paletteGrid = new Grid();
             for (int x = 0; x < Palette.Length; x++) paletteGrid.ColumnDefinitions.Add(new ColumnDefinition());
@@ -65,14 +63,13 @@ namespace SleepTimer
                     new GradientStop(Colors.Red, 0), new GradientStop(Colors.Yellow, 1d/6), new GradientStop(Colors.Lime, 2d/6),
                     new GradientStop(Colors.Cyan, .5), new GradientStop(Colors.Blue, 4d/6), new GradientStop(Colors.Magenta, 5d/6), new GradientStop(Colors.Red, 1) }, new Point(0, 0), new Point(1, 0)) };
             mixer.Children.Add(hue); pages.Children.Add(paletteGrid); pages.Children.Add(mixer); panel.Children.Add(pages);
-            paletteTab.Click += (s, e) => { paletteGrid.Visibility = Visibility.Visible; mixer.Visibility = Visibility.Collapsed; };
-            mixerTab.Click += (s, e) => { paletteGrid.Visibility = Visibility.Collapsed; mixer.Visibility = Visibility.Visible; };
+            tabs.Changed += on => { tabs.Set(on, true); paletteGrid.Visibility = on ? Visibility.Collapsed : Visibility.Visible; mixer.Visibility = on ? Visibility.Visible : Visibility.Collapsed; };
             hue.ValueChanged += (s, e) => { field.Hue = hue.Value; field.InvalidateVisual(); Preview(field.Mixed); };
             field.Changed += color => Preview(color);
             var footer = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
             note.Width = 370; footer.Children.Add(note); sample.Child = new TextBlock { Text = "Sample", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             footer.Children.Add(sample); panel.Children.Add(footer);
-            var apply = new Button { Content = "Apply mixed colour", Margin = new Thickness(0, 12, 0, 0) };
+            var apply = new Button { Style = (Style)FindResource("PrimaryButton"), Content = "Apply mixed colour", Margin = new Thickness(0, 12, 0, 0) };
             apply.Click += (s, e) => { Picked?.Invoke(field.Mixed); Close(); }; panel.Children.Add(apply);
             Content = panel;
             var drawingColor = System.Drawing.Color.FromArgb(current.R, current.G, current.B);

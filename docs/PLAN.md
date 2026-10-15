@@ -2,20 +2,22 @@
 
 ## Where we ended
 
-The WPF branch targets .NET Framework 4.8 and uses framework-provided WPF plus native tray integration. Build on Windows with .NET SDK 8; run bash scripts/check-timers.sh for portable logic and scripts/check-windows.ps1 for Windows UI checks. Test mode prevents real power actions. Never merge to main without the owner's instruction.
+Work stays on WPF; merge to main only when the owner requests it. Target .NET Framework 4.8. Build with .NET SDK 8 on Windows and run scripts/check-windows.ps1; run bash scripts/check-timers.sh for portable checks. TestMode blocks real power actions. Inspect rendered page and component-gallery PNGs attached to CI.
+
+This batch fixes dial-interior and descendant wheel input, timer/status window titles, force-close editability under Sleep, and aligned animation duration inputs. The force-close regression and native wheel reproduction were committed before the fixes.
 
 ## Next
 
-- Reproduce and fix wheel input over blank dial interiors and the action selector.
-- Show current time and status in the window title, separated with ·.
-- Let the force-close setting be switched off even when Sleep is selected.
-- Align independent animation-duration fields in Appearance.
-- Apply the supplied desktop design system using shared tokens/components, native Segoe UI, and the existing accent. Render and inspect all affected screens and a component gallery.
+- Complete Windows regression and screenshot review for the current batch.
+- Owner checks actual wheel interaction and high-refresh animation feel on Windows.
 
 ## Decisions
 
-- The supplied workflow and design-system references remain private working references; do not commit AGENTS.md or DESIGN_SYSTEM.md copied from the other repository.
-- Retain the mint default accent and user colour choices. Do not bundle fonts, a runtime, or a UI toolkit.
-- Preserve the circular timer, 600 ms default edit animations, independent configurable counter/circle timings and 400 ms hour stop.
-- Apply compact controls, role colours, a sidebar and unboxed settings groups. The large numeric timer and circular dial are application-specific displays rather than standard form controls.
-- Keep established scheduled power-action behavior: tests must never execute it; no confirmation is inserted at countdown expiry.
+- The supplied AGENTS.md and DESIGN_SYSTEM.md remain private working references. Neither imported file is part of the repository.
+- Retain the mint accent and user-selected colours. Use installed Segoe UI and installed monospace fonts; do not bundle fonts, a runtime or a UI toolkit.
+- The desktop design is implemented by shared role and geometry tokens. Sidebar navigation replaces the global gear and settings tabs. Unboxed setting blocks replace decorative cards; the keyboard reference is a reference card.
+- The logo/author footer is replaced by a plain status bar, as the supplied shell guideline specifies. Its GitHub action moves to the tray menu.
+- The inline action pill becomes the shared dropdown. Keep its three choices and active-timer restrictions.
+- The timer's large numerical display and circular geometry are domain-specific. Preserve 600 ms default edit motion, independent counter/circle overrides, and the 400 ms wheel stop.
+- Force close remains configurable with every action; it applies to shutdown/restart and is explicitly described as ignored for Sleep.
+- Scheduled power actions retain their behavior; no new confirmation is inserted at expiry. UI tests never execute them.
