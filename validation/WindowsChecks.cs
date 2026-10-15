@@ -57,13 +57,7 @@ namespace SleepTimer
             root.UpdateLayout();
             int width = (int)Math.Ceiling(root.ActualWidth), height = (int)Math.Ceiling(root.ActualHeight);
             var image = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-            var frame = new DrawingVisual();
-            using (var g = frame.RenderOpen())
-            {
-                g.DrawRectangle(Theme.Brush(Theme.Bg), null, new Rect(0, 0, width, height));
-                g.DrawRectangle(new VisualBrush(root) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top }, null, new Rect(0, 0, width, height));
-            }
-            image.Render(frame);
+            image.Render(root);
             var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(image));
             Directory.CreateDirectory("validation-output");
             string path = Path.Combine("validation-output", name + ".png");
@@ -90,6 +84,7 @@ namespace SleepTimer
 
         static void CollectResources()
         {
+            Console.WriteLine("CHECKPOINT: GC collect");
             GC.Collect();
             // WPF finalizers may marshal cleanup to the dispatcher; never block that thread waiting for them.
             var finalizers = System.Threading.Tasks.Task.Run(() => GC.WaitForPendingFinalizers());
@@ -104,7 +99,7 @@ namespace SleepTimer
 
         static void RenderGallery()
         {
-            var page = new StackPanel { Margin = new Thickness(Design.PageEdge) };
+            var page = new StackPanel();
             page.Children.Add(new TextBlock { Text = "Shared controls", FontSize = Design.Title, FontWeight = FontWeights.SemiBold });
             var buttons = Design.Block("Buttons");
             var row = new StackPanel { Orientation = Orientation.Horizontal };
@@ -131,10 +126,11 @@ namespace SleepTimer
                 menu.Children.Add(new Button { Content = text, IsEnabled = text != "Disabled item", HorizontalContentAlignment = HorizontalAlignment.Left, Style = (Style)Application.Current.FindResource("MenuButton") });
             page.Children.Add(menu);
             var tabs = new ModeSelector("Overview", "Details"); page.Children.Add(tabs);
-            var window = new Window { Content = page, Width = 580, SizeToContent = SizeToContent.Height, Background = Theme.Brush(Theme.Bg), Foreground = Theme.Brush(Theme.Text), ShowInTaskbar = false };
+            var galleryFrame = new Border { Child = page, Padding = new Thickness(Design.PageEdge), Background = Theme.Brush(Theme.Bg) };
+            var window = new Window { Content = galleryFrame, Width = 580, SizeToContent = SizeToContent.Height, Background = Theme.Brush(Theme.Bg), Foreground = Theme.Brush(Theme.Text), ShowInTaskbar = false };
             TextOptions.SetTextFormattingMode(page, TextFormattingMode.Display);
             TextOptions.SetTextRenderingMode(page, TextRenderingMode.ClearType);
-            window.Show(); Pump(250); CaptureControl(page, "wpf-gallery"); window.Close();
+            window.Show(); Pump(250); CaptureControl(galleryFrame, "wpf-gallery"); window.Close();
         }
 
         [STAThread] static int Main()
@@ -335,11 +331,13 @@ namespace SleepTimer
                     }
                     finally { Close(visual); }
                     Console.WriteLine("CHECKPOINT: resource disposal");
-                    for (int i = 0; i < 3; i++) { var warm = Open(); Pump(30); Close(warm); }
+                    for (int i = 0; i < 3; i++) { Console.WriteLine("CHECKPOINT: warmup " + i); var warm = Open(); Pump(30); Close(warm); }
+                    Console.WriteLine("CHECKPOINT: baseline collection");
                     CollectResources();
                     int baseline = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
                     for (int i = 0; i < 20; i++)
                     {
+                        Console.WriteLine("CHECKPOINT: disposal iteration " + i);
                         var repeat = Open();
                         Call(repeat, "AddTime", 300); Call(repeat, "ToggleSettings");
                         Pump(20); Close(repeat);
