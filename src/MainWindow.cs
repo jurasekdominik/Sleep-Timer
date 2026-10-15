@@ -65,8 +65,10 @@ namespace SleepTimer
         HwndSource source;
         public bool TestMode { get; set; }
 
-        public MainWindow()
+        public MainWindow(bool testMode = false)
         {
+            TestMode = testMode;
+            if (TestMode) Console.WriteLine("CHECKPOINT: construct window");
             countdown = new Countdown(Settings.Get("duration", Countdown.DefaultSeconds), () => clock.Elapsed.TotalSeconds);
             face.CircleMilliseconds = AnimationTiming.Normalize(Settings.Get("circle_sweep_ms", AnimationTiming.DefaultMilliseconds));
             face.CounterMilliseconds = AnimationTiming.Normalize(Settings.Get("counter_sweep_ms", AnimationTiming.DefaultMilliseconds));
@@ -95,7 +97,9 @@ namespace SleepTimer
             main.Width = settings.Width = Design.PageWidth; main.Height = settings.Height = Design.PageHeight;
             Grid.SetColumn(main, 1); Grid.SetColumn(settings, 1);
             root.Children.Add(main); root.Children.Add(settings); settings.Visibility = Visibility.Collapsed;
+            if (TestMode) Console.WriteLine("CHECKPOINT: build shared controls");
             BuildNavigation(); BuildMain(); BuildSettings(); BuildStatus();
+            if (TestMode) Console.WriteLine("CHECKPOINT: controls built");
             face.Toggle += StartPause; face.Cancel += Cancel; face.Wheel += AddTime;
             main.PreviewMouseWheel += (s, e) =>
             {
@@ -128,7 +132,9 @@ namespace SleepTimer
                     && !IsDescendant(box, e.OriginalSource as DependencyObject)) Keyboard.ClearFocus();
             };
 
+            if (TestMode) Console.WriteLine("CHECKPOINT: create native window handle");
             new WindowInteropHelper(this).EnsureHandle();
+            if (TestMode) Console.WriteLine("CHECKPOINT: initialize window state");
             SyncMode(false); ApplyAwake(); UpdateView(); RefreshNavigation(); ticker.Start();
         }
         static bool IsDescendant(DependencyObject parent, DependencyObject child)

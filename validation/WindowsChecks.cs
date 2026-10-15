@@ -42,11 +42,14 @@ namespace SleepTimer
         }
         static MainWindow Open()
         {
-            var window = new MainWindow { TestMode = true };
+            var window = new MainWindow(testMode: true);
             Field<DispatcherTimer>(window, "ticker").Stop();
-            window.Show(); window.UpdateLayout(); return window;
+            Console.WriteLine("CHECKPOINT: show window");
+            window.Show();
+            Console.WriteLine("CHECKPOINT: update window layout");
+            window.UpdateLayout(); return window;
         }
-        static void Close(MainWindow window) { Set(window, "quitting", true); window.Close(); window.Dispose(); }
+        static void Close(MainWindow window) { Console.WriteLine("CHECKPOINT: close window"); Set(window, "quitting", true); window.Close(); window.Dispose(); Console.WriteLine("CHECKPOINT: window closed"); }
         static void Capture(MainWindow window, string name)
         {
             window.UpdateLayout();
