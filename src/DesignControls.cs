@@ -164,7 +164,7 @@ namespace SleepTimer
         void Outside(object sender, MouseButtonEventArgs e) { if (!IsMouseOver) SetOpen(false); }
         double[] Segments => PowerAction.All.Select(a => VisualText.Width(this, a.Label) + 26).ToArray();
         double Expanded => Segments.Sum() + 8;
-        double Collapsed => VisualText.Width(this, PowerAction.Find(Current).Label) + 46;
+        double Collapsed => VisualText.Width(this, PowerAction.Find(Current).Label) + 32;
         double Shown => Collapsed + (Expanded - Collapsed) * Progress;
         public bool ContainsAction(Point p) => p.Y >= 0 && p.Y <= ActualHeight && InPill(p.X);
         bool InPill(double x) => x >= (ActualWidth - Shown) / 2 && x <= (ActualWidth + Shown) / 2;
@@ -196,9 +196,6 @@ namespace SleepTimer
                 Color color = !IsEnabled ? Theme.Blend(Theme.Bg, Theme.Text, .24) : hover >= 0 ? Theme.Text : Theme.Second;
                 var text = VisualText.Make(this, PowerAction.Find(Current).Label, 14, color);
                 g.DrawText(text, new Point(x + 16, (32 - text.Height) / 2));
-                var path = new StreamGeometry();
-                using (var p = path.Open()) { p.BeginFigure(new Point(x + Shown - 22, 14), false, false); p.LineTo(new Point(x + Shown - 18, 18), true, false); p.LineTo(new Point(x + Shown - 14, 14), true, false); }
-                g.DrawGeometry(null, new Pen(Theme.Brush(color), 1.6) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round }, path);
                 g.Pop();
             }
             alpha = Math.Max(0, Math.Min(1, Progress * 2 - 1));

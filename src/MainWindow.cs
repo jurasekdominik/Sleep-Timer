@@ -37,7 +37,7 @@ namespace SleepTimer
         readonly ToggleButton awakeSwitch = new ToggleButton();
         readonly ToggleButton startupSwitch = new ToggleButton { IsChecked = Settings.Get("start_with_windows", false) };
         readonly ToggleButton forceSwitch = new ToggleButton { IsChecked = Settings.Get("force", true) };
-        readonly TextBox accentField = new TextBox { MaxLength = 7, Width = 90 };
+        readonly TextBox accentField = new TextBox { MaxLength = 7, Width = 96, FontSize = 13, Padding = new Thickness(0), TextAlignment = TextAlignment.Center };
         readonly TextBox circleDuration = new TextBox { MaxLength = 5, TextAlignment = TextAlignment.Right };
         readonly TextBox counterDuration = new TextBox { MaxLength = 5, TextAlignment = TextAlignment.Right };
         readonly TextBox hourStopDuration = new TextBox { MaxLength = 5, TextAlignment = TextAlignment.Right };
@@ -47,7 +47,7 @@ namespace SleepTimer
         readonly TextBox quickMinutes = new TextBox { MaxLength = 4, Width = 184, Tag = "Minutes", ToolTip = "Whole minutes from 1 to 1440" };
         readonly TextBlock quickNote = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
         readonly StackPanel customRows = new StackPanel();
-        readonly ScrollViewer customScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        readonly ScrollViewer customScroll = new ThemedScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         Border quickCard;
         readonly PopupMenu trayMenu = new PopupMenu(), awakeMenu = new PopupMenu(160);
         readonly List<FrameworkElement> cards = new List<FrameworkElement>();
@@ -259,8 +259,8 @@ namespace SleepTimer
                 b.Click += (s, e) => ApplyAccent(color); swatches.Add(b);
                 Place(appearance, b, 14 + i % 4 * 40, 58 + i / 4 * 40);
             }
-            Place(appearance, Label("Custom", 12, true), 212, 70, 88, 16);
-            Place(appearance, accentField, 212, 104, 88, 32);
+            Place(appearance, Label("Custom", 12, true), 204, 70, 96, 16);
+            Place(appearance, accentField, 204, 104, 96, 32);
             accentField.PreviewMouseLeftButtonDown += (s, e) => OpenColorHelper();
             accentField.Text = "#" + Theme.Accent.R.ToString("X2") + Theme.Accent.G.ToString("X2") + Theme.Accent.B.ToString("X2");
             accentField.TextChanged += (s, e) =>
@@ -416,8 +416,8 @@ namespace SleepTimer
         void OpenColorHelper()
         {
             if (colorPicker != null && colorPicker.IsVisible) return;
-            colorPicker = new ColorPicker(Theme.Accent) { Owner = this };
-            colorPicker.Picked += ApplyAccent; colorPicker.Show();
+            colorPicker = new ColorPicker(Theme.Accent);
+            colorPicker.Picked += ApplyAccent; colorPicker.Show(accentField);
         }
         void CommitClock()
         {
@@ -513,7 +513,8 @@ namespace SleepTimer
                 row.ColumnDefinitions.Add(new ColumnDefinition());
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 row.Children.Add(Label(QuickTimers.Label(minutes)));
-                var remove = new Button { Content = "Remove", Height = 28, Padding = new Thickness(10, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center,
+                var remove = new Button { Content = "×", FontSize = 20, Width = 28, Height = 28, Padding = new Thickness(0), VerticalAlignment = VerticalAlignment.Center,
+                    Foreground = Theme.Brush(Theme.Danger), Style = (Style)FindResource("RemoveButton"),
                     ToolTip = "Remove " + QuickTimers.Label(minutes) };
                 remove.Click += (s, e) =>
                 {

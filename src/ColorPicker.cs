@@ -2,12 +2,13 @@ using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 
 namespace SleepTimer
 {
-    sealed class ColorPicker : Window
+    sealed class ColorPicker
     {
         static readonly (string hue, string[] shades)[] Palette = {
             ("red", new[] { "#fecaca", "#fca5a5", "#f87171", "#ef4444", "#dc2626" }),
@@ -29,20 +30,42 @@ namespace SleepTimer
             ("rose", new[] { "#fecdd3", "#fda4af", "#fb7185", "#f43f5e", "#e11d48" }),
         };
 
-        readonly ColorField field = new ColorField { Width = 476, Height = 150 };
-        readonly TextBlock note = new TextBlock { FontSize = 12, Margin = new Thickness(0, 12, 0, 0) };
-        readonly Border sample = new Border { Width = 84, Height = 30, CornerRadius = new CornerRadius(8), Margin = new Thickness(12, 0, 0, 0) };
+        readonly System.Windows.Controls.Primitives.Popup popup = new System.Windows.Controls.Primitives.Popup
+        {
+            AllowsTransparency = true, StaysOpen = false,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom
+        };
+        readonly ColorField field = new ColorField { Height = 112 };
+        readonly TextBlock hex = new TextBlock { FontSize = 12, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+        readonly TextBlock origin = new TextBlock { FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+        readonly TextBlock note = new TextBlock { FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+        readonly Border dot = new Border { Width = 22, Height = 22, CornerRadius = new CornerRadius(11), VerticalAlignment = VerticalAlignment.Center };
+        readonly Border sample = new Border { Width = 84, Height = 30, CornerRadius = new CornerRadius(8) };
+        readonly Color original;
+        Color preview;
+        public bool IsVisible => popup.IsOpen;
         public event Action<Color> Picked;
         public ColorPicker(Color current)
         {
-            Title = "Accent colour"; Width = 540; SizeToContent = SizeToContent.Height; ResizeMode = ResizeMode.NoResize;
-            WindowStartupLocation = WindowStartupLocation.CenterOwner; ShowInTaskbar = false; Background = Theme.Brush(Theme.Bg); Foreground = Theme.Brush(Theme.Text);
-            var panel = new StackPanel { Margin = new Thickness(16) };
-            var tabs = new StackPanel { Orientation = Orientation.Horizontal };
-            var paletteTab = new Button { Content = "PALETTE", Margin = new Thickness(0, 0, 8, 0) };
-            var mixerTab = new Button { Content = "MIXER" };
-            tabs.Children.Add(paletteTab); tabs.Children.Add(mixerTab); panel.Children.Add(tabs);
-            var pages = new Grid { Margin = new Thickness(0, 12, 0, 0), Height = 178 };
+            original = current;
+            var panel = new StackPanel();
+            var tabs = new Grid { Height = 22 };
+            var tabButtons = new StackPanel { Orientation = Orientation.Horizontal };
+            var paletteTab = new Button { Content = "P A L E T T E", FontSize = 12, FontWeight = FontWeights.SemiBold,
+                Style = (Style)Application.Current.FindResource("TextButton"), Margin = new Thickness(0, 0, 16, 0) };
+            var mixerTab = new Button { Content = "M I X E R", FontSize = 12, FontWeight = FontWeights.SemiBold,
+                Style = (Style)Application.Current.FindResource("TextButton") };
+            var paletteLine = new Border { Height = 2, VerticalAlignment = VerticalAlignment.Bottom };
+            var mixerLine = new Border { Height = 2, VerticalAlignment = VerticalAlignment.Bottom, Visibility = Visibility.Hidden };
+            paletteLine.SetResourceReference(Border.BackgroundProperty, "AccentBrush");
+            mixerLine.SetResourceReference(Border.BackgroundProperty, "AccentBrush");
+            var paletteHead = new Grid(); paletteHead.Children.Add(paletteTab); paletteHead.Children.Add(paletteLine);
+            paletteLine.Margin = new Thickness(0, 0, 16, 0);
+            var mixerHead = new Grid(); mixerHead.Children.Add(mixerTab); mixerHead.Children.Add(mixerLine);
+            tabButtons.Children.Add(paletteHead); tabButtons.Children.Add(mixerHead); tabs.Children.Add(tabButtons);
+            var legend = new TextBlock { Text = "faded = low contrast", FontSize = 12, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+            legend.SetResourceReference(TextBlock.ForegroundProperty, "FaintBrush"); tabs.Children.Add(legend); panel.Children.Add(tabs);
+            var pages = new Grid { Margin = new Thickness(0, 8, 0, 0), Height = 140 };
             var paletteGrid = new Grid();
             for (int x = 0; x < Palette.Length; x++) paletteGrid.ColumnDefinitions.Add(new ColumnDefinition());
             for (int y = 0; y < 5; y++) paletteGrid.RowDefinitions.Add(new RowDefinition());
@@ -51,45 +74,83 @@ namespace SleepTimer
                 {
                     Color color = Theme.Hex(Palette[x].shades[y]);
                     double contrast = Theme.Contrast(color, Theme.Bg);
-                    var chip = new Border { CornerRadius = new CornerRadius(4), Background = Theme.Brush(color),
+                    var chip = new Border { CornerRadius = new CornerRadius(6), Background = Theme.Brush(color),
                         Margin = new Thickness(2), Opacity = contrast >= 4.5 ? 1 : .55, Cursor = Cursors.Hand,
                         ToolTip = Palette[x].hue + " " + (200 + y * 100) + " · " + contrast.ToString("0.0", CultureInfo.InvariantCulture) + " : 1" };
                     chip.MouseEnter += (s, e) => Preview(color);
-                    chip.MouseLeftButtonUp += (s, e) => { Picked?.Invoke(color); Close(); };
+                    chip.MouseLeftButtonUp += (s, e) => { Picked?.Invoke(color); Close(); e.Handled = true; };
                     Grid.SetColumn(chip, x); Grid.SetRow(chip, y); paletteGrid.Children.Add(chip);
                 }
+            paletteGrid.MouseLeave += (s, e) => Preview(original);
             var mixer = new StackPanel { Visibility = Visibility.Collapsed };
             mixer.Children.Add(field);
-            var hue = new Slider { Minimum = 0, Maximum = 359.9, Height = 22, Margin = new Thickness(0, 5, 0, 0),
+            var hue = new Slider { Minimum = 0, Maximum = 359.9, Height = 22, Margin = new Thickness(0, 6, 0, 0),
                 Background = new LinearGradientBrush(new GradientStopCollection {
                     new GradientStop(Colors.Red, 0), new GradientStop(Colors.Yellow, 1d/6), new GradientStop(Colors.Lime, 2d/6),
                     new GradientStop(Colors.Cyan, .5), new GradientStop(Colors.Blue, 4d/6), new GradientStop(Colors.Magenta, 5d/6), new GradientStop(Colors.Red, 1) }, new Point(0, 0), new Point(1, 0)) };
             mixer.Children.Add(hue); pages.Children.Add(paletteGrid); pages.Children.Add(mixer); panel.Children.Add(pages);
-            paletteTab.Click += (s, e) => { paletteGrid.Visibility = Visibility.Visible; mixer.Visibility = Visibility.Collapsed; };
-            mixerTab.Click += (s, e) => { paletteGrid.Visibility = Visibility.Collapsed; mixer.Visibility = Visibility.Visible; };
+            paletteTab.Click += (s, e) =>
+            {
+                paletteGrid.Visibility = Visibility.Visible; mixer.Visibility = Visibility.Collapsed;
+                paletteLine.Visibility = Visibility.Visible; mixerLine.Visibility = Visibility.Hidden;
+                paletteTab.SetResourceReference(Button.ForegroundProperty, "TextBrush"); mixerTab.SetResourceReference(Button.ForegroundProperty, "SecondBrush");
+                Preview(original);
+            };
+            mixerTab.Click += (s, e) =>
+            {
+                paletteGrid.Visibility = Visibility.Collapsed; mixer.Visibility = Visibility.Visible;
+                paletteLine.Visibility = Visibility.Hidden; mixerLine.Visibility = Visibility.Visible;
+                mixerTab.SetResourceReference(Button.ForegroundProperty, "TextBrush"); paletteTab.SetResourceReference(Button.ForegroundProperty, "SecondBrush");
+                Preview(field.Mixed);
+            };
+            mixerTab.SetResourceReference(Button.ForegroundProperty, "SecondBrush");
             hue.ValueChanged += (s, e) => { field.Hue = hue.Value; field.InvalidateVisual(); Preview(field.Mixed); };
-            field.Changed += color => Preview(color);
-            var footer = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
-            note.Width = 370; footer.Children.Add(note); sample.Child = new TextBlock { Text = "Sample", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-            footer.Children.Add(sample); panel.Children.Add(footer);
-            var apply = new Button { Content = "Apply mixed colour", Margin = new Thickness(0, 12, 0, 0) };
-            apply.Click += (s, e) => { Picked?.Invoke(field.Mixed); Close(); }; panel.Children.Add(apply);
-            Content = panel;
+            field.Changed += Preview;
+            var separator = new Border { Height = 1, Margin = new Thickness(0, 10, 0, 8) };
+            separator.SetResourceReference(Border.BackgroundProperty, "BorderBrush"); panel.Children.Add(separator);
+            var footer = new Grid { Height = 30 };
+            foreach (double width in new[] { 32d, 84d, 82d, 0d, 84d })
+                footer.ColumnDefinitions.Add(new ColumnDefinition { Width = width == 0 ? new GridLength(1, GridUnitType.Star) : new GridLength(width) });
+            UIElement[] parts = { dot, hex, origin, note, sample };
+            for (int i = 0; i < parts.Length; i++) { Grid.SetColumn(parts[i], i); footer.Children.Add(parts[i]); }
+            origin.SetResourceReference(TextBlock.ForegroundProperty, "FaintBrush");
+            sample.Child = new TextBlock { Text = "Sample", FontSize = 13, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            sample.Cursor = Cursors.Hand; sample.ToolTip = "Apply this colour";
+            sample.MouseLeftButtonUp += (s, e) => { Picked?.Invoke(preview); Close(); e.Handled = true; };
+            panel.Children.Add(footer);
+            var border = new Border { Width = 504, Padding = new Thickness(12), BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10), Child = panel, Focusable = true, UseLayoutRounding = true, SnapsToDevicePixels = true };
+            border.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
+            border.SetResourceReference(Border.BorderBrushProperty, "MenuEdgeBrush");
+            border.SetResourceReference(TextElement.ForegroundProperty, "TextBrush");
+            border.SetValue(TextElement.FontFamilyProperty, new FontFamily("Segoe UI"));
+            border.PreviewKeyDown += (s, e) => { if (e.Key == Key.Escape) { Close(); e.Handled = true; } };
+            popup.Child = border;
+            popup.Opened += (s, e) => border.Focus();
             var drawingColor = System.Drawing.Color.FromArgb(current.R, current.G, current.B);
             field.Hue = drawingColor.GetHue();
             double max = Math.Max(current.R, Math.Max(current.G, current.B)) / 255d;
             double min = Math.Min(current.R, Math.Min(current.G, current.B)) / 255d;
             field.Value = max; field.Saturation = max == 0 ? 0 : (max - min) / max;
             hue.Value = field.Hue; Preview(current);
-            SourceInitialized += (s, e) => Native.DarkTitlebar(new System.Windows.Interop.WindowInteropHelper(this).Handle);
         }
+        public void Show(UIElement anchor)
+        {
+            popup.PlacementTarget = anchor; popup.VerticalOffset = 6;
+            popup.HorizontalOffset = anchor is FrameworkElement element ? element.ActualWidth - 504 : 0;
+            popup.IsOpen = true;
+        }
+        public void Close() => popup.IsOpen = false;
         void Preview(Color color)
         {
+            preview = color;
             double ratio = Theme.Contrast(color, Theme.Bg);
-            note.Text = "#" + color.R.ToString("X2") + color.G.ToString("X2") + color.B.ToString("X2") + " · " + ratio.ToString("0.0", CultureInfo.InvariantCulture)
-                + " : 1 · " + (ratio >= 4.5 ? "readable" : ratio >= 3 ? "borderline" : "low contrast");
+            hex.Text = "#" + color.R.ToString("X2") + color.G.ToString("X2") + color.B.ToString("X2");
+            hex.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
+            origin.Text = color == original ? "current" : "preview";
+            note.Text = ratio.ToString("0.0", CultureInfo.InvariantCulture) + " : 1 " + (ratio >= 4.5 ? "readable" : ratio >= 3 ? "borderline" : "low contrast");
             note.Foreground = Theme.Brush(ratio >= 4.5 ? Theme.Second : Theme.Danger);
-            sample.Background = Theme.Brush(color);
+            dot.Background = sample.Background = Theme.Brush(color);
             ((TextBlock)sample.Child).Foreground = Theme.Brush(Theme.Contrast(color, Theme.Bg) >= Theme.Contrast(color, Colors.White) ? Theme.Bg : Colors.White);
         }
     }

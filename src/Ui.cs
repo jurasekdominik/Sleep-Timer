@@ -103,19 +103,23 @@ namespace SleepTimer
   <Setter Property='Background' Value='{DynamicResource SurfaceBrush}'/>
   <Setter Property='BorderBrush' Value='{DynamicResource BorderBrush}'/>
   <Setter Property='CaretBrush' Value='{DynamicResource AccentBrush}'/>
-  <Setter Property='Padding' Value='9,3'/><Setter Property='FontSize' Value='14'/>
+  <Setter Property='Padding' Value='0'/><Setter Property='FontSize' Value='14'/>
   <Setter Property='FontFamily' Value='Segoe UI'/><Setter Property='VerticalContentAlignment' Value='Center'/>
   <Setter Property='MinHeight' Value='32'/>
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='TextBox'>
    <Border x:Name='box' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}'
     BorderThickness='1' CornerRadius='8'>
-    <Grid>
-     <ScrollViewer x:Name='PART_ContentHost' Focusable='False' Margin='{TemplateBinding Padding}' VerticalAlignment='{TemplateBinding VerticalContentAlignment}'/>
-     <TextBlock x:Name='hint' Text='{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}' Margin='{TemplateBinding Padding}' VerticalAlignment='Center' Foreground='{DynamicResource FaintBrush}' IsHitTestVisible='False' Visibility='Collapsed'/>
+    <Grid Margin='9,3'>
+     <ScrollViewer x:Name='PART_ContentHost' Focusable='False' VerticalAlignment='{TemplateBinding VerticalContentAlignment}'/>
+     <TextBlock x:Name='hint' Text='{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}'
+      FontSize='{TemplateBinding FontSize}' FontFamily='{TemplateBinding FontFamily}' TextAlignment='{TemplateBinding TextAlignment}'
+      VerticalAlignment='{TemplateBinding VerticalContentAlignment}' Foreground='{DynamicResource FaintBrush}' IsHitTestVisible='False' Visibility='Collapsed'/>
     </Grid>
    </Border>
    <ControlTemplate.Triggers>
-    <Trigger Property='Text' Value=''><Setter TargetName='hint' Property='Visibility' Value='Visible'/></Trigger>
+    <MultiTrigger><MultiTrigger.Conditions>
+     <Condition Property='Text' Value=''/><Condition Property='IsKeyboardFocusWithin' Value='False'/>
+    </MultiTrigger.Conditions><Setter TargetName='hint' Property='Visibility' Value='Visible'/></MultiTrigger>
     <Trigger Property='IsKeyboardFocused' Value='True'><Setter TargetName='box' Property='BorderBrush' Value='{DynamicResource AccentBrush}'/></Trigger>
     <Trigger Property='IsEnabled' Value='False'><Setter TargetName='box' Property='Opacity' Value='.4'/></Trigger>
    </ControlTemplate.Triggers>
@@ -206,6 +210,46 @@ namespace SleepTimer
     </Trigger>
     <Trigger Property='IsEnabled' Value='False'><Setter TargetName='box' Property='Opacity' Value='.4'/></Trigger>
    </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+
+ <Style x:Key='RemoveButton' TargetType='Button' BasedOn='{StaticResource {x:Type Button}}'>
+  <Setter Property='Foreground' Value='{DynamicResource DangerBrush}'/>
+  <Setter Property='Background' Value='Transparent'/><Setter Property='BorderThickness' Value='0'/>
+  <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Button'>
+   <Border x:Name='box' CornerRadius='4' Background='{TemplateBinding Background}'>
+    <ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>
+   </Border>
+   <ControlTemplate.Triggers>
+    <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='box' Property='Background' Value='{DynamicResource DangerSoftBrush}'/></Trigger>
+    <Trigger Property='IsKeyboardFocused' Value='True'><Setter TargetName='box' Property='Background' Value='{DynamicResource DangerSoftBrush}'/></Trigger>
+   </ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key='ScrollPageButton' TargetType='RepeatButton'>
+  <Setter Property='Focusable' Value='False'/><Setter Property='IsTabStop' Value='False'/>
+  <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='RepeatButton'><Border Background='Transparent'/></ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key='AppScrollBar' TargetType='ScrollBar'>
+  <Setter Property='Width' Value='8'/><Setter Property='MinWidth' Value='8'/><Setter Property='MaxWidth' Value='8'/>
+  <Setter Property='Background' Value='Transparent'/><Setter Property='Focusable' Value='False'/>
+  <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='ScrollBar'>
+   <Grid Background='{TemplateBinding Background}'>
+    <Track x:Name='PART_Track' IsDirectionReversed='True' Orientation='Vertical'
+     Minimum='{TemplateBinding Minimum}' Maximum='{TemplateBinding Maximum}' Value='{TemplateBinding Value}' ViewportSize='{TemplateBinding ViewportSize}'>
+     <Track.DecreaseRepeatButton><RepeatButton Command='{x:Static ScrollBar.PageUpCommand}' Style='{StaticResource ScrollPageButton}'/></Track.DecreaseRepeatButton>
+     <Track.Thumb><Thumb MinHeight='24'>
+      <Thumb.Template><ControlTemplate TargetType='Thumb'>
+       <Border x:Name='thumb' CornerRadius='3' Background='{DynamicResource BorderBrush}' Margin='1,0'/>
+       <ControlTemplate.Triggers>
+        <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='thumb' Property='Background' Value='{DynamicResource SecondBrush}'/></Trigger>
+        <Trigger Property='IsDragging' Value='True'><Setter TargetName='thumb' Property='Background' Value='{DynamicResource AccentBrush}'/></Trigger>
+       </ControlTemplate.Triggers>
+      </ControlTemplate></Thumb.Template>
+     </Thumb></Track.Thumb>
+     <Track.IncreaseRepeatButton><RepeatButton Command='{x:Static ScrollBar.PageDownCommand}' Style='{StaticResource ScrollPageButton}'/></Track.IncreaseRepeatButton>
+    </Track>
+   </Grid>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
 </ResourceDictionary>";
@@ -387,6 +431,20 @@ namespace SleepTimer
         }
     }
 
+    sealed class ThemedScrollViewer : ScrollViewer
+    {
+        public override void OnApplyTemplate()
+        {
+            base.OnApplyTemplate();
+            if (Template.FindName("PART_VerticalScrollBar", this) is System.Windows.Controls.Primitives.ScrollBar bar)
+            {
+                bar.Style = (Style)Application.Current.FindResource("AppScrollBar");
+                bar.Width = bar.MinWidth = bar.MaxWidth = 8;
+                bar.HorizontalAlignment = HorizontalAlignment.Right;
+            }
+        }
+    }
+
     sealed class MenuRow
     {
         public string Text, Right;
@@ -407,7 +465,7 @@ namespace SleepTimer
         public PopupMenu(int width = 224)
         {
             border = new Border { Width = width, CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(1),
-                Padding = new Thickness(0, 4, 0, 4), Child = new ScrollViewer { Content = items, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 520 } };
+                Padding = new Thickness(0, 4, 0, 4), Child = new ThemedScrollViewer { Content = items, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxHeight = 520 } };
             border.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
             border.SetResourceReference(Border.BorderBrushProperty, "MenuEdgeBrush");
             border.Focusable = true;
