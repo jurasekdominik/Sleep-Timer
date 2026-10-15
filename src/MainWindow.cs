@@ -30,6 +30,9 @@ namespace SleepTimer
         readonly Canvas main = new Canvas(), settings = new Canvas();
         readonly Grid root = new Grid();
         readonly Button gear = new Button { Content = new GearMark(), Padding = new Thickness(0), Width = 30, Height = 30, ToolTip = "Settings" };
+        readonly Button fontButton = new Button { Content = new TextBlock { Text = "Aa", FontFamily = new FontFamily("Segoe UI"), FontWeight = FontWeights.SemiBold, FontSize = 14 },
+            Padding = new Thickness(0), Width = 30, Height = 30, ToolTip = "Fonts", Visibility = Visibility.Collapsed };
+        readonly PopupMenu fontMenu = new PopupMenu(160);
         readonly ActionSelector picker = new ActionSelector();
         readonly ModeSelector modeSelector = new ModeSelector();
         readonly TextBox clockField = new TextBox { MaxLength = 5, Width = 101.333333, Height = 32, TextAlignment = TextAlignment.Center, ToolTip = "24-hour time, HH:mm. Scroll hours or minutes; arrow keys adjust." };
@@ -99,7 +102,7 @@ namespace SleepTimer
             root.Width = 368; root.Height = 508; root.Background = Theme.Brush(Theme.Bg);
             ResizeMode = ResizeMode.CanMinimize; WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Background = Theme.Brush(Theme.Bg); Content = root;
-            FontFamily = new FontFamily("Segoe UI"); FontSize = 14; Foreground = Theme.Brush(Theme.Text);
+            SetResourceReference(FontFamilyProperty, "UiFontFamily"); SetResourceReference(FontWeightProperty, "UiFontWeight"); FontSize = 14; Foreground = Theme.Brush(Theme.Text);
             TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
             TextOptions.SetTextRenderingMode(this, TextRenderingMode.ClearType);
             UseLayoutRounding = true; SnapsToDevicePixels = true;
@@ -113,6 +116,9 @@ namespace SleepTimer
             gear.HorizontalAlignment = HorizontalAlignment.Right; gear.VerticalAlignment = VerticalAlignment.Top; gear.Margin = new Thickness(0, 12, 24, 0);
             gear.Style = (Style)FindResource("IconButton");
             root.Children.Add(gear); gear.Click += (s, e) => ToggleSettings();
+            fontButton.HorizontalAlignment = HorizontalAlignment.Right; fontButton.VerticalAlignment = VerticalAlignment.Top;
+            fontButton.Margin = new Thickness(0, 12, 60, 0); fontButton.Style = (Style)FindResource("IconButton");
+            root.Children.Add(fontButton); fontButton.Click += (s, e) => ShowFontMenu();
             face.Toggle += StartPause; face.Cancel += Cancel; face.Wheel += AddTime;
             main.PreviewMouseWheel += (s, e) =>
             {
@@ -273,9 +279,6 @@ namespace SleepTimer
             }
             var appearance = (Canvas)Card(1, 88, 160).Child;
             Place(appearance, Label("Accent colour"), 20, 16, 180, 24);
-            var fonts = new Button { Content = "Fonts…", FontSize = 12, Height = 26, Padding = new Thickness(8, 2, 8, 2), ToolTip = "Compare six Windows font variations for the timer" };
-            Place(appearance, fonts, 220, 14, 80, 26);
-            fonts.Click += (s, e) => OpenFontGallery();
             Place(appearance, accentNote, 20, 38, 280, 18);
             string[] colors = { "#0CD29D", "#BADC58", "#FFB142", "#FF793F", "#FD79A8", "#8C7AE6", "#A29BFE", "#34ACE0" };
             for (int i = 0; i < colors.Length; i++)
@@ -320,7 +323,7 @@ namespace SleepTimer
             Place(timerCard, quickNote, 16, 144, 288, 20);
             customScroll.Content = customRows;
             Place(timerCard, customScroll, 16, 176, 288, 32);
-            BuildShortcutSettings();
+            BuildShortcutSettings(); LayoutTabs();
             SelectTab(0); RefreshQuickTimers(); AccentNote(); AddFooter(settings);
         }
         void BuildShortcutSettings()
@@ -510,6 +513,18 @@ namespace SleepTimer
             label.MouseLeftButtonUp += click; detail.MouseLeftButtonUp += click;
         }
 
+        void LayoutTabs()
+        {
+            for (int i = 0; i < tabButtons.Count; i++)
+                tabWidths[i] = VisualText.Make(this, (string)tabButtons[i].Content, 12, Theme.Text, true).WidthIncludingTrailingWhitespace;
+            double gap = Math.Min(15, Math.Max(0, (320 - tabWidths.Sum() - 4) / Math.Max(1, tabButtons.Count - 1)));
+            double x = 0;
+            for (int i = 0; i < tabButtons.Count; i++)
+            {
+                tabPositions[i] = x; Canvas.SetLeft(tabButtons[i], x); tabButtons[i].Width = tabWidths[i] + 4;
+                x += tabWidths[i] + gap;
+            }
+        }
         void SelectTab(int tab)
         {
             selectedTab = tab;
@@ -530,6 +545,8 @@ namespace SleepTimer
         void ToggleSettings()
         {
             settingsOpen = !settingsOpen;
+            fontButton.Visibility = settingsOpen ? Visibility.Visible : Visibility.Collapsed;
+            fontMenu.Close();
             var from = settingsOpen ? main : settings;
             var to = settingsOpen ? settings : main;
             from.IsHitTestVisible = false; to.IsHitTestVisible = true; to.Visibility = Visibility.Visible;
@@ -569,35 +586,45 @@ namespace SleepTimer
             clockField.IsHitTestVisible = clockMode;
             if (!clockField.IsKeyboardFocusWithin) clockField.Text = TimeText.HourMinute(clockMinute);
         }
-        void OpenFontGallery()
+        void ShowFontMenu()
         {
-            if (fontGallery != null) { fontGallery.Activate(); return; }
-            var gallery = new Window { Owner = this, Title = "Timer font", Width = 400, SizeToContent = SizeToContent.Height,
+            if (fontMenu.Visible || fontMenu.JustClosed) return;
+            fontMenu.Show(new[] {
+                new MenuRow { Text = "Timer font", Click = () => OpenFontGallery(false) },
+                new MenuRow { Text = "UI font", Click = () => OpenFontGallery(true) }
+            }, fontButton);
+        }
+        void OpenFontGallery(bool ui)
+        {
+            fontGallery?.Close();
+            var gallery = new Window { Owner = this, Title = ui ? "UI font" : "Timer font", Width = 420, SizeToContent = SizeToContent.Height,
                 ResizeMode = ResizeMode.NoResize, WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Background = Theme.Brush(Theme.Bg), ShowInTaskbar = false, UseLayoutRounding = true, SnapsToDevicePixels = true };
             var panel = new StackPanel { Margin = new Thickness(16) };
-            panel.Children.Add(Label("Choose a timer font", 16));
+            panel.Children.Add(Label(ui ? "Choose a UI font" : "Choose a timer font", 16));
+            var available = Label("Installed fonts only · no downloads", 12, true);
+            available.Margin = new Thickness(0, 6, 0, 0); panel.Children.Add(available);
             var choices = new List<Button>();
-            foreach (var font in TimerFonts.All)
+            foreach (var font in AppFonts.All)
             {
                 var row = new Grid();
                 row.ColumnDefinitions.Add(new ColumnDefinition());
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(148) });
-                var name = Label(font.Name, 12); row.Children.Add(name);
-                var sample = new TextBlock { Text = "01:30:00", FontSize = 26, FontFamily = font.Typeface.FontFamily,
+                var name = Label(font.Name, 12); name.TextTrimming = TextTrimming.CharacterEllipsis; row.Children.Add(name);
+                var sample = new TextBlock { Text = ui ? "Sleep Timer" : "01:30:00", FontSize = ui ? 22 : 26, FontFamily = font.Typeface.FontFamily,
                     FontWeight = font.Typeface.Weight, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
                 Grid.SetColumn(sample, 1); row.Children.Add(sample);
                 var choice = new Button { Content = row, Height = 56, Margin = new Thickness(0, 8, 0, 0), Padding = new Thickness(10, 4, 10, 4),
-                    HorizontalContentAlignment = HorizontalAlignment.Stretch, Tag = font };
-                choice.BorderBrush = Theme.Brush(font == TimerFonts.Current ? Theme.Accent : Theme.Border);
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch, Tag = font, ToolTip = font.Name };
+                choice.BorderBrush = Theme.Brush(font == (ui ? AppFonts.Ui : AppFonts.Timer) ? Theme.Accent : Theme.Border);
                 choice.Click += (s, e) =>
                 {
-                    ApplyTimerFont(font.Key);
-                    foreach (var button in choices) button.BorderBrush = Theme.Brush(button.Tag == TimerFonts.Current ? Theme.Accent : Theme.Border);
+                    ApplyFont(font.Key, ui);
+                    foreach (var button in choices) button.BorderBrush = Theme.Brush(button.Tag == (ui ? AppFonts.Ui : AppFonts.Timer) ? Theme.Accent : Theme.Border);
                 };
                 choices.Add(choice); panel.Children.Add(choice);
             }
-            var note = Label("Changes timer digits only. Other text stays Segoe UI.", 12, true);
+            var note = Label(ui ? "Changes labels, controls, menus and tooltips. Timer digits keep their own font." : "Changes timer digits only. The UI has its own font selection.", 12, true);
             note.TextWrapping = TextWrapping.Wrap; note.Margin = new Thickness(0, 12, 0, 0); panel.Children.Add(note);
             var done = new Button { Content = "Done", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
             done.Click += (s, e) => gallery.Close(); panel.Children.Add(done);
@@ -608,11 +635,20 @@ namespace SleepTimer
             gallery.Closed += (s, e) => fontGallery = null;
             fontGallery = gallery; gallery.Show();
         }
-        void ApplyTimerFont(string key)
+        void ApplyFont(string key, bool ui)
         {
-            TimerFonts.Current = TimerFonts.Find(key);
-            Settings.Set("timer_font", TimerFonts.Current.Key);
-            face.InvalidateVisual();
+            var font = AppFonts.Find(key);
+            if (ui)
+            {
+                AppFonts.Ui = font;
+                Theme.UpdateResources(Application.Current.Resources);
+                LayoutTabs(); SelectTab(selectedTab);
+                if (awakeMenu.Visible) awakeMenu.SetRows(ChipRows());
+                if (trayMenu.Visible) trayMenu.SetRows(TrayRows());
+            }
+            else AppFonts.Timer = font;
+            Settings.Set(ui ? "ui_font" : "timer_font", font.Key);
+            InvalidateTree(root);
         }
 
         void OpenColorHelper()
@@ -1022,7 +1058,7 @@ namespace SleepTimer
             UnregisterShortcuts();
             source?.RemoveHook(WindowMessage);
             face.Snap(0);
-            trayMenu.Dispose(); awakeMenu.Dispose(); colorPicker?.Close(); fontGallery?.Close();
+            trayMenu.Dispose(); awakeMenu.Dispose(); fontMenu.Dispose(); colorPicker?.Close(); fontGallery?.Close();
             tray.Visible = false; tray.Icon?.Dispose(); tray.Dispose();
             if (trayHandle != IntPtr.Zero) { Native.DestroyIcon(trayHandle); trayHandle = IntPtr.Zero; }
             Native.KeepAwake(false, false);

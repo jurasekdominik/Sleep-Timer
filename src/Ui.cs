@@ -44,7 +44,8 @@ namespace SleepTimer
 
         public static void Init(Application app)
         {
-            TimerFonts.Current = TimerFonts.Find(Settings.Get("timer_font", "segoe"));
+            AppFonts.Timer = AppFonts.Find(Settings.Get("timer_font", "segoe"));
+            AppFonts.Ui = AppFonts.Find(Settings.Get("ui_font", "segoe"));
             string saved = Settings.Get("accent", DefaultAccent);
             if (System.Text.RegularExpressions.Regex.IsMatch(saved, "^#[0-9A-Fa-f]{6}$")) Accent = Hex(saved);
             app.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(Styles));
@@ -52,6 +53,8 @@ namespace SleepTimer
         }
         public static void UpdateResources(ResourceDictionary r)
         {
+            r["UiFontFamily"] = AppFonts.Ui.Typeface.FontFamily;
+            r["UiFontWeight"] = AppFonts.Ui.Typeface.Weight;
             r["BgBrush"] = Brush(Bg); r["SurfaceBrush"] = Brush(Surface);
             r["TextBrush"] = Brush(Text); r["SecondBrush"] = Brush(Second);
             r["BorderBrush"] = Brush(Border); r["AccentBrush"] = Brush(Accent);
@@ -67,12 +70,12 @@ namespace SleepTimer
         const string Styles = @"
 <ResourceDictionary xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
  xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
- <Style TargetType='Window'><Setter Property='Foreground' Value='{DynamicResource TextBrush}'/><Setter Property='FontFamily' Value='Segoe UI'/><Setter Property='FontSize' Value='14'/></Style>
+ <Style TargetType='Window'><Setter Property='Foreground' Value='{DynamicResource TextBrush}'/><Setter Property='FontFamily' Value='{DynamicResource UiFontFamily}'/><Setter Property='FontWeight' Value='{DynamicResource UiFontWeight}'/><Setter Property='FontSize' Value='14'/></Style>
  <Style TargetType='ToolTip'>
   <Setter Property='Background' Value='{DynamicResource SurfaceBrush}'/>
   <Setter Property='Foreground' Value='{DynamicResource TextBrush}'/>
   <Setter Property='BorderBrush' Value='{DynamicResource BorderBrush}'/>
-  <Setter Property='FontFamily' Value='Segoe UI'/><Setter Property='FontSize' Value='12'/>
+  <Setter Property='FontFamily' Value='{DynamicResource UiFontFamily}'/><Setter Property='FontWeight' Value='{DynamicResource UiFontWeight}'/><Setter Property='FontSize' Value='12'/>
   <Setter Property='Padding' Value='10,7'/><Setter Property='HasDropShadow' Value='False'/>
   <Setter Property='UseLayoutRounding' Value='True'/><Setter Property='SnapsToDevicePixels' Value='True'/>
   <Setter Property='ContentTemplate'><Setter.Value><DataTemplate>
@@ -86,14 +89,14 @@ namespace SleepTimer
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style TargetType='TextBlock'>
-  <Setter Property='FontFamily' Value='Segoe UI'/>
+  <Setter Property='FontFamily' Value='{DynamicResource UiFontFamily}'/><Setter Property='FontWeight' Value='{DynamicResource UiFontWeight}'/>
  </Style>
  <Style TargetType='Button'>
   <Setter Property='Foreground' Value='{DynamicResource TextBrush}'/>
   <Setter Property='Background' Value='{DynamicResource SurfaceBrush}'/>
   <Setter Property='BorderBrush' Value='{DynamicResource BorderBrush}'/>
   <Setter Property='Padding' Value='12,7'/><Setter Property='Cursor' Value='Hand'/>
-  <Setter Property='FontFamily' Value='Segoe UI'/>
+  <Setter Property='FontFamily' Value='{DynamicResource UiFontFamily}'/><Setter Property='FontWeight' Value='{DynamicResource UiFontWeight}'/>
   <Setter Property='FontSize' Value='14'/>
   <Setter Property='HorizontalContentAlignment' Value='Center'/>
   <Setter Property='VerticalContentAlignment' Value='Center'/>
@@ -123,7 +126,7 @@ namespace SleepTimer
   <Setter Property='BorderBrush' Value='{DynamicResource BorderBrush}'/>
   <Setter Property='CaretBrush' Value='{DynamicResource AccentBrush}'/>
   <Setter Property='Padding' Value='0'/><Setter Property='FontSize' Value='14'/>
-  <Setter Property='FontFamily' Value='Segoe UI'/><Setter Property='VerticalContentAlignment' Value='Center'/>
+  <Setter Property='FontFamily' Value='{DynamicResource UiFontFamily}'/><Setter Property='FontWeight' Value='{DynamicResource UiFontWeight}'/><Setter Property='VerticalContentAlignment' Value='Center'/>
   <Setter Property='MinHeight' Value='32'/>
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='TextBox'>
    <Border x:Name='box' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}'
@@ -303,8 +306,6 @@ namespace SleepTimer
         readonly Geometry[] hourSectors = new Geometry[24];
         readonly Drawing[] hourArtwork = new Drawing[24];
         readonly Dictionary<double, TextArtwork> textArtwork = new Dictionary<double, TextArtwork>();
-        static readonly Typeface normalFace = new Typeface("Segoe UI");
-        static readonly Typeface boldFace = new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
         sealed class TextArtwork
         {
             public string Text;
@@ -475,7 +476,7 @@ namespace SleepTimer
         {
             text = text ?? "";
             double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-            var typeface = counter ? TimerFonts.Current.Typeface : bold ? boldFace : normalFace;
+            var typeface = counter ? AppFonts.Timer.Typeface : bold ? AppFonts.Ui.BoldTypeface : AppFonts.Ui.Typeface;
             if (!textArtwork.TryGetValue(size, out TextArtwork cached) || cached.Text != text || cached.Color != color
                 || cached.Dpi != dpi || cached.Width != ActualWidth || cached.Bold != bold || cached.Typeface != typeface)
             {

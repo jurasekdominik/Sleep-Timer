@@ -125,7 +125,8 @@ namespace SleepTimer
             border.SetResourceReference(Border.BackgroundProperty, "SurfaceBrush");
             border.SetResourceReference(Border.BorderBrushProperty, "MenuEdgeBrush");
             border.SetResourceReference(TextElement.ForegroundProperty, "TextBrush");
-            border.SetValue(TextElement.FontFamilyProperty, new FontFamily("Segoe UI"));
+            border.SetResourceReference(TextElement.FontFamilyProperty, "UiFontFamily");
+            border.SetResourceReference(TextElement.FontWeightProperty, "UiFontWeight");
             border.PreviewKeyDown += (s, e) => { if (e.Key == Key.Escape) { Close(); e.Handled = true; } };
             popup.Child = border;
             // Keep keyboard focus and the caret in the anchor field until a popup control is clicked.

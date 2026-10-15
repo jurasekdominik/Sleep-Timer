@@ -15,7 +15,8 @@ namespace SleepTimer
             : Fonts.SystemFontFamilies.Any(f => f.Source == "Cascadia Mono") ? "Cascadia Mono" : "Consolas");
         public static FormattedText Make(Visual owner, string text, double size, Color color, bool bold = false, bool mono = false) =>
             new FormattedText(text ?? "", CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-                new Typeface(mono ? Mono : new FontFamily("Segoe UI"), FontStyles.Normal, bold ? FontWeights.SemiBold : FontWeights.Normal, FontStretches.Normal),
+                mono ? new Typeface(Mono, FontStyles.Normal, bold ? FontWeights.SemiBold : FontWeights.Normal, FontStretches.Normal)
+                    : bold ? AppFonts.Ui.BoldTypeface : AppFonts.Ui.Typeface,
                 size, Theme.Brush(color), VisualTreeHelper.GetDpi(owner).PixelsPerDip);
         public static double Width(Visual owner, string text, double size = 14) => Make(owner, text, size, Theme.Text).WidthIncludingTrailingWhitespace;
         public static void Draw(DrawingContext g, Visual owner, string text, double size, Color color, double x, double y, bool bold = false, bool mono = false) =>

@@ -28,7 +28,7 @@ namespace SleepTimer
             Check(source != null && GetWindowRect(source.Handle, out _), "Popup has no native window");
             GetWindowRect(source.Handle, out var rectangle); return rectangle;
         }
-        const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
+        const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
         [DllImport("user32.dll")] static extern int GetGuiResources(IntPtr process, int flags);
         [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr window, int msg, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint thread, ref GuiThreadInfo info);
@@ -41,7 +41,12 @@ namespace SleepTimer
         }
         static T Field<T>(object owner, string name) => (T)owner.GetType().GetField(name, Private).GetValue(owner);
         static void Set(object owner, string name, object value) => owner.GetType().GetField(name, Private).SetValue(owner, value);
-        static object Call(object owner, string name, params object[] args) => owner.GetType().GetMethod(name, Private).Invoke(owner, args);
+        static object Call(object owner, string name, params object[] args)
+        {
+            var method = owner.GetType().GetMethod(name, Private);
+            if (method == null) throw new MissingMethodException(owner.GetType().FullName, name);
+            return method.Invoke(owner, args);
+        }
         static void Check(bool okay, string text) { if (!okay) throw new Exception(text); }
         static void Pump(int milliseconds)
         {
@@ -72,7 +77,7 @@ namespace SleepTimer
             Directory.CreateDirectory("validation-output");
             string path = Path.Combine("validation-output", name + ".png");
             using (var file = File.Create(path)) png.Save(file);
-            Console.WriteLine("PREVIEW:" + name + ":" + Convert.ToBase64String(File.ReadAllBytes(path)));
+            Console.WriteLine("PREVIEW:" + name + ":" + path);
         }
         static void CheckShortcuts(MainWindow window)
         {
@@ -173,7 +178,7 @@ namespace SleepTimer
                     Settings.Set("start_with_windows", false); Settings.Set("awake", false);
                     Settings.Set("clock_mode", false); Settings.Set("duration", 1800);
                     Settings.Set("circle_sweep_ms", 600); Settings.Set("counter_sweep_ms", 600);
-                    Settings.Set("timer_font", "segoe");
+                    Settings.Set("timer_font", "segoe"); Settings.Set("ui_font", "segoe");
                     Settings.Set("hotkey_toggle_key", 0); Settings.Set("hotkey_toggle_modifiers", 0);
                     Settings.Set("hotkey_quick_key", 0); Settings.Set("hotkey_quick_modifiers", 0);
                     var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -279,23 +284,46 @@ namespace SleepTimer
                         var countdown = Field<Countdown>(visual, "countdown");
                         countdown.SetDuration(10800); Call(visual, "UpdateView", false); Pump(150);
                         Check(((FrameworkElement)visual.Content).ActualHeight >= 508, "Client area clips the footer");
-                        Check(TimerFonts.All.Length == 6 && TimerFonts.All.Select(font => font.Key).Distinct().Count() == 6,
-                            "Expected six distinct timer font examples");
-                        Check(TimerFonts.Find("unknown") == TimerFonts.All[0], "Invalid font setting has no safe fallback");
-                        Call(visual, "OpenFontGallery"); Pump(100);
+                        Check(AppFonts.All.Length >= 6 && AppFonts.All.Select(font => font.Key).Distinct().Count() == AppFonts.All.Length,
+                            "Font choices are missing or duplicate");
+                        var installed = Fonts.SystemFontFamilies.Select(font => font.Source).ToArray();
+                        Check(AppFonts.All.All(font => font.Key == "segoe" || installed.Contains(font.Family, StringComparer.OrdinalIgnoreCase)),
+                            "Unavailable fonts are offered as installed choices");
+                        Check(AppFonts.All.Any(font => font.Key == "aptos") == installed.Contains("Aptos", StringComparer.OrdinalIgnoreCase),
+                            "Aptos availability does not match installed fonts");
+                        Check(AppFonts.Timer.Key == "segoe" && AppFonts.Ui.Key == "segoe", "Font defaults must both be Segoe UI");
+                        Check(Field<Button>(visual, "fontButton").Visibility == Visibility.Collapsed, "Font icon is visible outside settings");
+                        Check(AppFonts.Find("unknown") == AppFonts.All[0], "Invalid font setting has no safe fallback");
+                        Call(visual, "OpenFontGallery", false); Pump(100);
                         CaptureControl((FrameworkElement)Field<Window>(visual, "fontGallery").Content, "wpf-font-gallery");
                         Field<Window>(visual, "fontGallery").Close();
                         var fontFace = Field<TimerFace>(visual, "face");
-                        foreach (var font in TimerFonts.All)
+                        foreach (var font in AppFonts.All)
                         {
-                            Call(visual, "ApplyTimerFont", font.Key); Pump(50);
+                            Call(visual, "ApplyFont", font.Key, false); Pump(50);
                             Capture(visual, "wpf-font-" + font.Key);
                             var artwork = Field<System.Collections.IDictionary>(fontFace, "textArtwork")[45.3];
                             Check((Typeface)artwork.GetType().GetField("Typeface").GetValue(artwork) == font.Typeface,
                                 "Changing the timer font left stale cached glyphs");
-                            Check(TimerFonts.Find(Settings.Get("timer_font", "")) == font, "Timer font selection was not saved");
+                            Check(AppFonts.Find(Settings.Get("timer_font", "")) == font && AppFonts.Ui.Key == "segoe", "Timer font was not saved independently of UI");
                         }
-                        Call(visual, "ApplyTimerFont", "segoe"); Pump(50);
+                        Call(visual, "ApplyFont", "segoe", false); Pump(50);
+                        foreach (var font in AppFonts.All)
+                        {
+                            Call(visual, "ApplyFont", font.Key, true); Pump(50);
+                            Check(visual.FontFamily == font.Typeface.FontFamily && Field<TextBox>(visual, "clockField").FontFamily == font.Typeface.FontFamily,
+                                "UI font did not update window or input controls");
+                            Check(AppFonts.Timer.Key == "segoe", "UI font changed the timer font");
+                            Check(Settings.Get("ui_font", "") == font.Key && Settings.Get("timer_font", "") == "segoe", "Font selections were not saved independently");
+                            var buttons = Field<System.Collections.Generic.List<Button>>(visual, "tabButtons");
+                            Check(Canvas.GetLeft(buttons.Last()) + buttons.Last().Width <= 320.5, "UI font pushes settings tabs outside the window");
+                            if (font.Key == "aptos" || font.Key == "verdana" || font.Key == "consolas") Capture(visual, "wpf-ui-font-" + font.Key);
+                        }
+                        Call(visual, "ApplyFont", "segoe", true); Pump(50);
+                        Call(visual, "OpenFontGallery", true); Pump(100);
+                        Check(Field<Window>(visual, "fontGallery").Title == "UI font", "UI gallery opened with the wrong target");
+                        CaptureControl((FrameworkElement)Field<Window>(visual, "fontGallery").Content, "wpf-ui-font-gallery");
+                        Field<Window>(visual, "fontGallery").Close();
                         Capture(visual, "wpf-main");
                         CaptureControl((FrameworkElement)visual.Content, "wpf-main-150", 1.5);
                         CaptureControl((FrameworkElement)visual.Content, "wpf-main-200", 2);
@@ -312,6 +340,11 @@ namespace SleepTimer
                         Call(selector, "SetOpen", true); Pump(300); Capture(visual, "wpf-action-selector");
                         Call(selector, "SetOpen", false); Pump(300);
                         Call(visual, "ToggleSettings"); Pump(300);
+                        Check(Field<Button>(visual, "fontButton").Visibility == Visibility.Visible, "Font icon missing in settings");
+                        Call(visual, "ShowFontMenu"); Pump(100);
+                        var fontMenu = Field<PopupMenu>(visual, "fontMenu");
+                        Check(Field<StackPanel>(fontMenu, "items").Children.OfType<Button>().Count() == 2, "Font menu must offer Timer and UI");
+                        CaptureControl((FrameworkElement)Field<Popup>(fontMenu, "popup").Child, "wpf-font-menu"); fontMenu.Close();
                         var toggle = Field<ToggleButton>(visual, "forceSwitch");
                         var thumb = (Border)toggle.Template.FindName("thumb", toggle);
                         Check(((SolidColorBrush)thumb.Background).Color == Colors.White && thumb.Width == 28 && thumb.Height == 20, "Original switch capsule was changed");
