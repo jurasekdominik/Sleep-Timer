@@ -153,7 +153,12 @@ namespace SleepTimer
                 root.ColumnDefinitions[0].Width = new GridLength(collapsed ? Design.Sidebar : Design.CollapsedSidebar);
                 root.Width = (collapsed ? Design.Sidebar : Design.CollapsedSidebar) + Design.PageWidth;
                 foreach (var nav in navigationButtons)
-                    if (nav.Content is Grid grid && grid.Children.Count > 1) grid.Children[1].Visibility = collapsed ? Visibility.Visible : Visibility.Collapsed;
+                    if (nav.Content is Grid grid && grid.Children.Count > 1)
+                    {
+                        grid.Children[1].Visibility = collapsed ? Visibility.Visible : Visibility.Collapsed;
+                        bool child = !Equals(nav.ToolTip, "Timer") && !Equals(nav.ToolTip, "Settings");
+                        nav.Margin = new Thickness(collapsed && child ? Design.ColumnGap : Design.Gap, 0, Design.Gap, child ? 0 : Design.Space);
+                    }
                 collapse.ToolTip = collapsed ? "Collapse navigation" : "Expand navigation";
                 collapse.Content = Icons.View(collapsed ? Icons.ChevronLeft : Icons.ChevronRight);
             };

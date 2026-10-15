@@ -36,9 +36,9 @@ namespace SleepTimer
         readonly string leftText, rightText;
         bool right;
         int hover = -1;
-        public ModeSelector(string left = "Duration", string right = "At time")
+        public ModeSelector(string left = "Duration", string rightLabel = "At time")
         {
-            leftText = left; rightText = right;
+            leftText = left; rightText = rightLabel;
             Width = Design.ModeWidth; Height = Design.Field; Cursor = Cursors.Hand; Focusable = true;
             MouseMove += (s, e) => { hover = e.GetPosition(this).X >= ActualWidth / 2 ? 1 : 0; InvalidateVisual(); };
             MouseLeave += (s, e) => { hover = -1; InvalidateVisual(); };
