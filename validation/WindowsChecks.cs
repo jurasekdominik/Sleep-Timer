@@ -87,6 +87,21 @@ namespace SleepTimer
         }
 
 
+
+        static void CollectResources()
+        {
+            GC.Collect();
+            // WPF finalizers may marshal cleanup to the dispatcher; never block that thread waiting for them.
+            var finalizers = System.Threading.Tasks.Task.Run(() => GC.WaitForPendingFinalizers());
+            var timeout = Stopwatch.StartNew();
+            while (!finalizers.IsCompleted)
+            {
+                if (timeout.ElapsedMilliseconds > 10000) throw new Exception("WPF finalizer cleanup exceeded 10 seconds");
+                Pump(10);
+            }
+            finalizers.GetAwaiter().GetResult(); GC.Collect(); Pump(100);
+        }
+
         static void RenderGallery()
         {
             var page = new StackPanel { Margin = new Thickness(Design.PageEdge) };
@@ -319,7 +334,7 @@ namespace SleepTimer
                     finally { Close(visual); }
                     Console.WriteLine("CHECKPOINT: resource disposal");
                     for (int i = 0; i < 3; i++) { var warm = Open(); Pump(30); Close(warm); }
-                    GC.Collect(); GC.WaitForPendingFinalizers(); Pump(100);
+                    CollectResources();
                     int baseline = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
                     for (int i = 0; i < 20; i++)
                     {
@@ -327,7 +342,7 @@ namespace SleepTimer
                         Call(repeat, "AddTime", 300); Call(repeat, "ToggleSettings");
                         Pump(20); Close(repeat);
                     }
-                    GC.Collect(); GC.WaitForPendingFinalizers(); Pump(150);
+                    CollectResources();
                     int final = GetGuiResources(Process.GetCurrentProcess().Handle, 0);
                     Check(final - baseline < 32, "GDI handle growth: " + baseline + " -> " + final);
                     Console.WriteLine("CHECKPOINT: component gallery");
