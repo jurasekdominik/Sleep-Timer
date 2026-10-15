@@ -1,8 +1,8 @@
 name: Validate
 on:
   push:
-    branches: [main]
-    tags: [v1.0]
+    branches: [main, WPF]
+    tags: [v1.1]
     paths-ignore: ['assets/screenshot*.png', 'README.md']
   pull_request:
   workflow_dispatch:
@@ -20,8 +20,8 @@ jobs:
         with:
           dotnet-version: '8.0.x'
       - run: bash scripts/check-timers.sh
-      - run: dotnet build SleepTimer.csproj -c Release --nologo -warnaserror
   windows:
+    needs: logic
     runs-on: windows-latest
     permissions:
       contents: write
@@ -33,24 +33,32 @@ jobs:
       - run: dotnet build SleepTimer.csproj -c Release --nologo -warnaserror
       - shell: pwsh
         run: ./scripts/check-windows.ps1
+      - name: Measure executable and verify standalone startup
+        shell: pwsh
+        run: |
+          $exe = Get-Item bin/Release/net48/SleepTimer.exe
+          $size = "SleepTimer.exe: $($exe.Length) bytes ($([math]::Round($exe.Length / 1024, 1)) KiB)"
+          Write-Output $size
+          New-Item validation-output -ItemType Directory -Force | Out-Null
+          $size | Set-Content validation-output/size.txt
+          $size | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          $standalone = Join-Path $env:RUNNER_TEMP 'sleep-timer-standalone'
+          New-Item $standalone -ItemType Directory -Force | Out-Null
+          Copy-Item $exe.FullName (Join-Path $standalone 'SleepTimer.exe')
+          $process = Start-Process (Join-Path $standalone 'SleepTimer.exe') -ArgumentList '--verify-startup' -PassThru
+          if (-not $process.WaitForExit(15000)) { $process.Kill(); throw 'Standalone executable did not complete startup check' }
+          if ($process.ExitCode -ne 0) { throw "Standalone startup failed: $($process.ExitCode)" }
       - uses: actions/upload-artifact@v4
         with:
-          name: SleepTimer-1.0
-          path: bin/Release/net48/SleepTimer.exe
-      - name: Update 1.0 release
-        if: github.event_name == 'push' && github.ref == 'refs/tags/v1.0'
+          name: SleepTimer
+          path: |
+            bin/Release/net48/SleepTimer.exe
+            validation-output/
+      - name: Publish 1.1 release
+        if: github.event_name == 'push' && github.ref == 'refs/tags/v1.1'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
-          "A Windows timer for shutdown, sleep and restart, with quick presets and keep-awake options.`n`nRequires Windows 10/11 and .NET Framework 4.8. Download SleepTimer.exe and run it." | Set-Content $notes -Encoding utf8
-          gh release view v1.0 --repo '${{ github.repository }}' *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release edit v1.0 --repo '${{ github.repository }}' --title 'Sleep Timer 1.0' --notes-file $notes --latest
-          } else {
-            gh release create v1.0 --repo '${{ github.repository }}' --verify-tag --title 'Sleep Timer 1.0' --notes-file $notes --latest
-          }
-          if ($LASTEXITCODE -ne 0) { throw 'Release creation or update failed' }
-          gh release upload v1.0 bin/Release/net48/SleepTimer.exe --repo '${{ github.repository }}' --clobber
-          if ($LASTEXITCODE -ne 0) { throw 'Release executable upload failed' }
+          gh release create v1.1 bin/Release/net48/SleepTimer.exe --repo '${{ github.repository }}' --verify-tag --title 'Sleep Timer 1.1' --notes-file CHANGELOG.md
+          if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }

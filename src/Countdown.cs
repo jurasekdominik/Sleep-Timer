@@ -88,18 +88,33 @@ namespace SleepTimer
 
         public static string HourMinute(int minuteOfDay) => $"{minuteOfDay / 60:00}:{minuteOfDay % 60:00}";
 
-        /// <summary>Next time the wall clock shows the given minute of day; a time already passed means tomorrow.</summary>
-        public static DateTime NextOccurrence(DateTime now, int minuteOfDay)
+        /// <summary>Next future local target. Gaps advance to the first valid minute;
+        /// repeated times use the first occurrence that is still in the future.</summary>
+        public static DateTimeOffset NextOccurrence(DateTimeOffset now, int minuteOfDay, TimeZoneInfo zone)
         {
-            var t = now.Date.AddMinutes(minuteOfDay);
-            return t <= now ? t.AddDays(1) : t;
+            var day = TimeZoneInfo.ConvertTime(now, zone).Date;
+            for (;; day = day.AddDays(1))
+            {
+                var local = DateTime.SpecifyKind(day.AddMinutes(minuteOfDay), DateTimeKind.Unspecified);
+                while (zone.IsInvalidTime(local)) local = local.AddMinutes(1);
+                var offsets = zone.IsAmbiguousTime(local) ? zone.GetAmbiguousTimeOffsets(local)
+                    : new[] { zone.GetUtcOffset(local) };
+                DateTimeOffset? next = null;
+                foreach (var offset in offsets)
+                {
+                    var candidate = new DateTimeOffset(local, offset);
+                    if (candidate > now && (!next.HasValue || candidate < next.Value)) next = candidate;
+                }
+                if (next.HasValue) return next.Value;
+            }
         }
 
         /// <summary>Default target for "At time": now + duration, rounded up to the next 5 minutes.</summary>
-        public static int DefaultClock(DateTime now, int durationSeconds)
+        public static int DefaultClock(DateTimeOffset now, int durationSeconds, TimeZoneInfo zone)
         {
-            var t = now.AddSeconds(durationSeconds);
-            return (t.Hour * 60 + t.Minute + 4) / 5 * 5 % 1440;
+            var t = TimeZoneInfo.ConvertTime(now.AddSeconds(durationSeconds), zone);
+            long step = TimeSpan.TicksPerMinute * 5;
+            return (int)(((t.TimeOfDay.Ticks + step - 1) / step * 5) % 1440);
         }
     }
 }

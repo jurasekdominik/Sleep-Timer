@@ -11,8 +11,11 @@ cat > "$check_dir/Checks.csproj" <<'PROJECT'
     <Compile Include="$(SleepTimerRoot)/src/Countdown.cs" />
     <Compile Include="$(SleepTimerRoot)/src/TimerDial.cs" />
     <Compile Include="$(SleepTimerRoot)/src/QuickTimers.cs" />
-    <Compile Include="$(SleepTimerRoot)/src/SwitchGeometry.cs" />
     <Compile Include="$(SleepTimerRoot)/src/WheelInput.cs" />
+    <Compile Include="$(SleepTimerRoot)/src/AnimationTiming.cs" />
+    <Compile Include="$(SleepTimerRoot)/src/PowerAction.cs" />
+    <Compile Include="$(SleepTimerRoot)/src/Shortcut.cs" />
+    <Compile Include="$(SleepTimerRoot)/src/ScreenPlacement.cs" />
   </ItemGroup>
 </Project>
 PROJECT
@@ -66,8 +69,72 @@ class Checks
         var restored = new QuickTimers(presets.Save());
         if (!restored.All.SequenceEqual(presets.All)) throw new Exception("save/reload"); checks++;
         if (!presets.Remove(180) || presets.All.Contains(180) || presets.Remove(30)) throw new Exception("custom removal preserves defaults"); checks++;
-        foreach (string invalid in new[] {"", "1.5", "-1", "0", "1441", "9999999999", "hello"})
+        foreach (string invalid in new[] {"", "1.5", "-1", "0", "1441", "9999999999", "hello", "1,5", "1.5h", "1,5h", "1h 30m", "1:30", "90m", "0h", "25h", "+2", "-2h", "9999999999h"})
         { if (QuickTimers.TryMinutes(invalid, out _)) throw new Exception("invalid input accepted"); checks++; }
+        foreach (var input in new[] { ("1", 1), ("90", 90), ("1440", 1440), ("1h", 60), ("2h", 120), ("5h", 300), ("24h", 1440), (" 2H ", 120) })
+        {
+            if (!QuickTimers.TryMinutes(input.Item1, out int minutes)) throw new Exception("valid timer rejected: " + input.Item1);
+            Equal(minutes, input.Item2, "whole-minute and whole-hour parsing");
+        }
+        foreach (var command in new[] { (false, false, "/s /t 0"), (false, true, "/s /f /t 0"),
+            (true, false, "/r /t 0"), (true, true, "/r /f /t 0") })
+        {
+            if (PowerAction.ShutdownArguments(command.Item1, command.Item2) != command.Item3)
+                throw new Exception("Power action/force arguments do not match the selected action");
+            checks++;
+        }
+        foreach (int modifiers in new[] { 1, 2, 3, 6, 8, 15 })
+        {
+            if (!Shortcut.TryCreate(modifiers, 0x41, out var binding)) throw new Exception("valid shortcut rejected");
+            if (!binding.MatchesMessage((0x41L << 16) | modifiers)
+                || !binding.MatchesMessage((0x41L << 16) | modifiers | 0x4000)
+                || binding.MatchesMessage((0x42L << 16) | modifiers)) throw new Exception("shortcut message matching");
+            checks++;
+        }
+        foreach (var invalid in new[] { (0, 0x41), (4, 0x41), (16, 0x41), (2, 0), (2, 0x11), (2, 0x5B), (2, 0x100) })
+        {
+            if (Shortcut.TryCreate(invalid.Item1, invalid.Item2, out _)) throw new Exception("unsafe shortcut accepted");
+            checks++;
+        }
+        if (default(Shortcut).IsBound || default(Shortcut).Matches(default)
+            || default(Shortcut).MatchesMessage(0)) throw new Exception("unbound shortcut can match");
+        checks++;
+        Shortcut.TryCreate(3, 0x87, out var firstShortcut);
+        Shortcut.TryCreate(3, 0x87, out var duplicateShortcut);
+        Shortcut.TryCreate(3, 0x86, out var secondShortcut);
+        if (!firstShortcut.Matches(duplicateShortcut) || firstShortcut.Matches(secondShortcut)) throw new Exception("shortcut collision detection");
+        checks++;
+        foreach (var sample in new[] {
+            (1900, 1050, 224, 300, 0, 0, 1920, 1040, 1676, 740),
+            (-20, 1000, 224, 300, -1920, 0, 0, 1040, -244, 700),
+            (2000, 500, 320, 400, 1920, 0, 4480, 1400, 1920, 100),
+            (100, -1000, 300, 500, 0, -1440, 2560, 0, 0, -1440),
+            (1910, 10, 224, 300, 0, 40, 1920, 1080, 1686, 40) })
+        {
+            var position = ScreenPlacement.Above(sample.Item1, sample.Item2, sample.Item3, sample.Item4,
+                sample.Item5, sample.Item6, sample.Item7, sample.Item8);
+            Equal(position.X, sample.Item9, "tray monitor horizontal pixel positioning");
+            Equal(position.Y, sample.Item10, "tray monitor vertical pixel positioning");
+        }
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Prague");
+        var fall = new DateTimeOffset(2026, 10, 25, 1, 30, 0, TimeSpan.FromHours(2));
+        Equal((TimeText.NextOccurrence(fall, 210, zone) - fall).TotalHours, 3, "fall clock transition");
+        var spring = new DateTimeOffset(2026, 3, 29, 1, 30, 0, TimeSpan.FromHours(1));
+        Equal((TimeText.NextOccurrence(spring, 210, zone) - spring).TotalHours, 1, "spring clock transition");
+        var gap = TimeText.NextOccurrence(spring, 150, zone);
+        Equal(gap.Hour * 60 + gap.Minute, 180, "nonexistent time advances to first valid minute");
+        Equal((gap - spring).TotalMinutes, 30, "nonexistent time elapsed duration");
+        Equal((TimeText.NextOccurrence(fall, 150, zone) - fall).TotalHours, 1, "first repeated time");
+        var repeated = new DateTimeOffset(2026, 10, 25, 2, 45, 0, TimeSpan.FromHours(2));
+        Equal((TimeText.NextOccurrence(repeated, 150, zone) - repeated).TotalMinutes, 45, "second repeated time when first has passed");
+        var normal = new DateTimeOffset(2026, 10, 15, 23, 30, 0, TimeSpan.FromHours(2));
+        Equal((TimeText.NextOccurrence(normal, 30, zone) - normal).TotalHours, 1, "next-day scheduling");
+        Equal(TimeText.DefaultClock(spring, 3600, zone), 210, "default target crosses spring clock change");
+        Equal(TimeText.DefaultClock(fall, 7200, zone), 150, "default target crosses fall clock change");
+        var round = new DateTimeOffset(2026, 10, 15, 12, 0, 45, TimeSpan.Zero);
+        Equal(TimeText.DefaultClock(round, 1800, TimeZoneInfo.Utc), 755, "round seconds up to five-minute boundary");
+        Equal(TimeText.DefaultClock(round.AddSeconds(-45), 1800, TimeZoneInfo.Utc), 750, "exact five-minute boundary stays unchanged");
+        Equal(TimeText.DefaultClock(new DateTimeOffset(2026, 10, 15, 23, 29, 59, TimeSpan.Zero).AddMilliseconds(999), 1800, TimeZoneInfo.Utc), 0, "round across midnight");
         if (QuickTimers.Label(60) != "1 hour" || QuickTimers.Label(120) != "2 hours" || QuickTimers.Label(90) != "1 h 30 min") throw new Exception("duration labels"); checks++;
         now = 0;
         timer = new Countdown(7200, () => now);
@@ -101,18 +168,6 @@ class Checks
         Equal(TimerStatus.Complete(0), 100, "finished completion");
         Equal(TimerStatus.Complete(1.5), 0, "bounded completion");
         Equal(TimerStatus.Complete(-.5), 100, "bounded expiration completion");
-        foreach (double scale in new[] {1d, 1.5, 2})
-        {
-            Equal(SwitchGeometry.ThumbWidth(44 * scale, 24 * scale, scale, 0), 28 * scale, "standard capsule width");
-            foreach (double pressed in new[] {0d, .5, 1})
-                foreach (double size in new[] {34d, 36, 44})
-                {
-                    double height = (size == 34 ? 18 : size == 36 ? 20 : 24) * scale;
-                    double width = SwitchGeometry.ThumbWidth(size * scale, height, scale, pressed);
-                    if (width <= height - 4 * scale || width > (size - 4) * scale) throw new Exception("capsule geometry or press containment");
-                    checks++;
-                }
-        }
         Equal(TimerDial.For(9000).HourFill, 2.5, "2h30 last hour half faded");
         Equal(TimerDial.For(10800).HourFill, 3, "3h all hour segments full");
         Equal(TimerDial.For(7200).HourFill, 2, "2h two segments full at rollover");
@@ -133,6 +188,14 @@ class Checks
         Equal(TimerDial.ArcFraction(3570), 3570d / 3600, "backward animation wraps through top");
         Equal(TimerDial.ArcFraction(10830), 30d / 3600, "later revolutions wrap identically");
         Equal(TimerDial.ArcFraction(0), 0, "expired animated arc is empty");
+        Equal(AnimationTiming.Normalize(600), 600, "default animation duration");
+        Equal(AnimationTiming.Normalize(0), 0, "instant animation supported");
+        Equal(AnimationTiming.Normalize(-1), 600, "invalid persisted duration falls back");
+        Equal(AnimationTiming.Normalize(10001), 600, "oversized persisted duration falls back");
+        foreach (string invalid in new[] { "", "-1", "1.5", "10001", "fast", "999999999999" })
+        { if (AnimationTiming.TryParse(invalid, out _)) throw new Exception("invalid animation duration accepted"); checks++; }
+        foreach (string valid in new[] { "0", "120", "600", "10000" })
+        { if (!AnimationTiming.TryParse(valid, out _)) throw new Exception("valid animation duration rejected"); checks++; }
         var stop = new HourStop();
         Equal(stop.Adjust(3300, 900, 0), 300, "coarse wheel snaps to first hour");
         Equal(stop.Adjust(3600, 300, 399), 0, "hour hold lasts 400 ms");

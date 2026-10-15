@@ -18,8 +18,17 @@ namespace SleepTimer
                 if (TryMinutes(value, out int minutes)) Add(minutes);
         }
 
-        public static bool TryMinutes(string text, out int minutes) =>
-            int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out minutes) && minutes >= 1 && minutes <= 1440;
+        public static bool TryMinutes(string text, out int minutes)
+        {
+            minutes = 0;
+            string value = (text ?? "").Trim().ToLowerInvariant();
+            bool hours = value.EndsWith("h", StringComparison.Ordinal);
+            if (hours) value = value.Substring(0, value.Length - 1).TrimEnd();
+            if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int amount)
+                || amount < 1 || amount > (hours ? 24 : 1440)) return false;
+            minutes = hours ? amount * 60 : amount;
+            return true;
+        }
 
         public bool Add(int minutes) => minutes >= 1 && minutes <= 1440 && !Defaults.Contains(minutes) && custom.Add(minutes);
         public bool Remove(int minutes) => custom.Remove(minutes);

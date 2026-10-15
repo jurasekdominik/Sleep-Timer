@@ -17,6 +17,10 @@ Get portable `SleepTimer.exe` from [Releases](https://github.com/jurasekdominik/
 - Quick timers from the tray, with your own presets.
 - Keep the PC awake, optionally with the screen on.
 - Custom accent colour and optional startup with Windows.
+- WPF interface with smooth animations.
+- Global keybinds for Start / Cancel and the last quick timer.
+- Separate timer and UI fonts, with font weight selection.
+- Timer status in the title bar and progress in the taskbar icon.
 
 ## Use
 
@@ -31,7 +35,7 @@ Choose an action, set a duration or a clock time, and click the circle to start.
   <tr><td>Ctrl + Shift + scroll</td><td>±60 minutes</td></tr>
 </table>
 
-Keep awake prevents automatic sleep, with an option to keep the screen on. Right-click the tray icon for quick timers and keep-awake options. Add your own timer presets in Settings.
+Keep awake prevents automatic sleep, with an option to keep the screen on. Right-click the tray icon for quick timers and keep-awake options. Add your own timer presets in Settings using whole minutes (`90`) or hours (`2h`).
 
 Closing the window hides it to the tray. Double-click the tray icon to reopen it, or choose Quit from its menu.
 

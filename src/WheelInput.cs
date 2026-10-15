@@ -2,9 +2,10 @@ using System;
 
 namespace SleepTimer
 {
-    /// <summary>Snaps wheel edits to whole hours and ignores continued input for 400 ms.</summary>
+    /// <summary>Snaps wheel edits to whole hours and briefly ignores continued input.</summary>
     sealed class HourStop
     {
+        public int HoldMilliseconds { get; set; } = 400;
         int direction;
         double boundary = double.NaN, until;
         public void Reset() { direction = 0; boundary = double.NaN; until = 0; }
@@ -24,7 +25,7 @@ namespace SleepTimer
                 && (direction > 0 ? current + delta >= next : current + delta <= next))
             {
                 boundary = next;
-                until = milliseconds + 400;
+                until = milliseconds + Math.Max(0, HoldMilliseconds);
                 return next - current;
             }
             return delta;

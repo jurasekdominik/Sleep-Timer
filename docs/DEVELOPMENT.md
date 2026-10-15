@@ -1,12 +1,22 @@
 # Development
 
-Install .NET SDK 8. On Windows, run `build.cmd` to create `SleepTimer.exe`.
+Sleep Timer targets .NET Framework 4.8 and uses WPF. WinForms is used only for the Windows tray icon. No third-party runtime packages are required.
 
-## Checks
+## Build and checks
 
-- Logic checks: `bash scripts/check-timers.sh`.
-- Windows UI and resource checks: `powershell -File scripts/check-windows.ps1`.
+Install .NET SDK 8 on Windows, then run:
 
-Windows checks exercise quick-timer actions, fast wheel input, disposal during animations, and GDI resource growth. Expiry polling is stopped before test countdowns; no power action is executed. Use a disposable test machine because the checks write app settings.
+```powershell
+./build.cmd
+./scripts/check-windows.ps1
+```
 
-CI builds with warnings treated as errors and runs both suites. Pushing the `v1.0` tag also replaces the release executable after the Windows checks pass. Screenshots are maintained manually.
+Portable timer checks run on Linux or Windows with Bash:
+
+```sh
+bash scripts/check-timers.sh
+```
+
+Windows checks preserve saved settings and suppress power actions. CI also checks standalone startup and uploads the executable and UI previews.
+
+Before a release, test real power actions, global keybinds, tray positioning across monitors, and text at different Windows scaling settings.
