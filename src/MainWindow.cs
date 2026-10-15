@@ -63,6 +63,7 @@ namespace SleepTimer
         int clockMinute, awakeMinutes, lastQuickMinutes, trayPage, selectedTab;
         double awakeEnd;
         bool clockMode, clockTouched, settingsOpen, syncing, durationDirty, warned, executing, quitting, disposed, sessionEnding;
+        bool wheelViewPending;
         string iconKey;
         IntPtr trayHandle;
         HwndSource source;
@@ -461,8 +462,14 @@ namespace SleepTimer
                 else { countdown.SetDuration(countdown.Duration + (int)adjustment); durationDirty = true; wheelSave.Restart(); }
             }
             else { countdown.Adjust(adjustment); if (countdown.Remaining > 60) warned = false; }
-            UpdateView(true);
+            // Every wheel event updates the model immediately; paint only the latest target per frame.
+            if (!wheelViewPending)
+            {
+                wheelViewPending = true;
+                CompositionTarget.Rendering += RenderWheelView;
+            }
         }
+        void RenderWheelView(object sender, EventArgs e) => RefreshView(true, true);
         void StartPause()
         {
             if (executing) return;
@@ -661,8 +668,15 @@ namespace SleepTimer
             }
             UpdateView();
         }
-        void UpdateView(bool animate = false)
+        void UpdateView(bool animate = false) => RefreshView(animate, false);
+        void RefreshView(bool animate, bool dialOnly)
         {
+            if (wheelViewPending)
+            {
+                wheelViewPending = false;
+                CompositionTarget.Rendering -= RenderWheelView;
+                animate = true;
+            }
             if (disposed || executing) return;
             var state = countdown.State; bool idle = state == TimerState.Idle;
             double seconds = idle ? countdown.Duration : countdown.Remaining;
@@ -688,6 +702,8 @@ namespace SleepTimer
             }
             Title = face.Time + " · " + (idle ? clockMode ? "Scheduled" : "Ready" : state == TimerState.Running ? "Running" : "Paused");
             face.Tone = TimerStatus.Tone(state, seconds); face.UpdatePosition(seconds, animate, state == TimerState.Running);
+            // Tray IPC, menus and unrelated controls refresh on the regular status tick.
+            if (dialOnly) return;
             picker.SetCurrent(action.Key); picker.IsEnabled = mode.IsEnabled = idle;
             forceSwitch.IsEnabled = action.Key != "sleep";
             string awake = awakeMinutes < 0 ? "on" : awakeMinutes > 0 ? TimeText.Clock(awakeEnd - clock.Elapsed.TotalSeconds) : null;
@@ -788,6 +804,7 @@ namespace SleepTimer
             if (disposed) return;
             SaveDuration(); disposed = true;
             ticker.Stop(); aborted?.Stop();
+            CompositionTarget.Rendering -= RenderWheelView; wheelViewPending = false;
             source?.RemoveHook(WindowMessage);
             face.Snap(0);
             trayMenu.Dispose(); awakeMenu.Dispose(); colorPicker?.Close();

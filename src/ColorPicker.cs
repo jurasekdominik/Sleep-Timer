@@ -43,6 +43,7 @@ namespace SleepTimer
         readonly Border sample = new Border { Width = 84, Height = 30, CornerRadius = new CornerRadius(8) };
         readonly Color original;
         Color preview;
+        bool mixerMode;
         public bool IsVisible => popup.IsOpen;
         public event Action<Color> Picked;
         public ColorPicker(Color current)
@@ -84,27 +85,28 @@ namespace SleepTimer
             paletteGrid.MouseLeave += (s, e) => Preview(original);
             var mixer = new StackPanel { Visibility = Visibility.Collapsed };
             mixer.Children.Add(field);
-            var hue = new Slider { Minimum = 0, Maximum = 359.9, Height = 22, Margin = new Thickness(0, 6, 0, 0),
-                Background = new LinearGradientBrush(new GradientStopCollection {
-                    new GradientStop(Colors.Red, 0), new GradientStop(Colors.Yellow, 1d/6), new GradientStop(Colors.Lime, 2d/6),
-                    new GradientStop(Colors.Cyan, .5), new GradientStop(Colors.Blue, 4d/6), new GradientStop(Colors.Magenta, 5d/6), new GradientStop(Colors.Red, 1) }, new Point(0, 0), new Point(1, 0)) };
+            var hue = new HueSlider { Height = 22, Margin = new Thickness(0, 6, 0, 0) };
             mixer.Children.Add(hue); pages.Children.Add(paletteGrid); pages.Children.Add(mixer); panel.Children.Add(pages);
             paletteTab.Click += (s, e) =>
             {
+                mixerMode = false;
                 paletteGrid.Visibility = Visibility.Visible; mixer.Visibility = Visibility.Collapsed;
                 paletteLine.Visibility = Visibility.Visible; mixerLine.Visibility = Visibility.Hidden;
                 paletteTab.SetResourceReference(Button.ForegroundProperty, "TextBrush"); mixerTab.SetResourceReference(Button.ForegroundProperty, "SecondBrush");
+                legend.Text = "faded = low contrast";
                 Preview(original);
             };
             mixerTab.Click += (s, e) =>
             {
+                mixerMode = true;
                 paletteGrid.Visibility = Visibility.Collapsed; mixer.Visibility = Visibility.Visible;
                 paletteLine.Visibility = Visibility.Hidden; mixerLine.Visibility = Visibility.Visible;
                 mixerTab.SetResourceReference(Button.ForegroundProperty, "TextBrush"); paletteTab.SetResourceReference(Button.ForegroundProperty, "SecondBrush");
+                legend.Text = "below the dotted line = low contrast";
                 Preview(field.Mixed);
             };
             mixerTab.SetResourceReference(Button.ForegroundProperty, "SecondBrush");
-            hue.ValueChanged += (s, e) => { field.Hue = hue.Value; field.InvalidateVisual(); Preview(field.Mixed); };
+            hue.Changed += value => { field.Hue = value; field.InvalidateVisual(); Preview(field.Mixed); };
             field.Changed += Preview;
             var separator = new Border { Height = 1, Margin = new Thickness(0, 10, 0, 8) };
             separator.SetResourceReference(Border.BackgroundProperty, "BorderBrush"); panel.Children.Add(separator);
@@ -147,7 +149,7 @@ namespace SleepTimer
             double ratio = Theme.Contrast(color, Theme.Bg);
             hex.Text = "#" + color.R.ToString("X2") + color.G.ToString("X2") + color.B.ToString("X2");
             hex.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
-            origin.Text = color == original ? "current" : "preview";
+            origin.Text = color == original ? "current" : mixerMode ? "mixed" : "preview";
             note.Text = ratio.ToString("0.0", CultureInfo.InvariantCulture) + " : 1 " + (ratio >= 4.5 ? "readable" : ratio >= 3 ? "borderline" : "low contrast");
             note.Foreground = Theme.Brush(ratio >= 4.5 ? Theme.Second : Theme.Danger);
             dot.Background = sample.Background = Theme.Brush(color);
@@ -155,8 +157,64 @@ namespace SleepTimer
         }
     }
 
+    /// <summary>Vector hue strip with a circular handle and no operating-system slider chrome.</summary>
+    sealed class HueSlider : FrameworkElement
+    {
+        static readonly Brush rainbow = CreateRainbow();
+        double value;
+        public double Value
+        {
+            get => value;
+            set { this.value = Math.Max(0, Math.Min(359.9, value)); InvalidateVisual(); }
+        }
+        public event Action<double> Changed;
+        public HueSlider()
+        {
+            Focusable = true; Cursor = Cursors.Hand;
+            ToolTip = "Hue · drag or use arrow keys";
+            MouseLeftButtonDown += (s, e) => { Focus(); CaptureMouse(); Pick(e.GetPosition(this).X); e.Handled = true; };
+            MouseMove += (s, e) => { if (IsMouseCaptured) Pick(e.GetPosition(this).X); };
+            MouseLeftButtonUp += (s, e) => { if (IsMouseCaptured) { Pick(e.GetPosition(this).X); ReleaseMouseCapture(); e.Handled = true; } };
+            KeyDown += (s, e) =>
+            {
+                double next = Value;
+                if (e.Key == Key.Left || e.Key == Key.Down) next -= 1;
+                else if (e.Key == Key.Right || e.Key == Key.Up) next += 1;
+                else if (e.Key == Key.Home) next = 0;
+                else if (e.Key == Key.End) next = 359.9;
+                else return;
+                Value = next; Changed?.Invoke(Value); e.Handled = true;
+            };
+        }
+        void Pick(double x)
+        {
+            Value = Math.Max(0, Math.Min(1, (x - 8) / Math.Max(1, ActualWidth - 16))) * 359.9;
+            Changed?.Invoke(Value);
+        }
+        static Brush CreateRainbow()
+        {
+            var brush = new LinearGradientBrush(new GradientStopCollection {
+                new GradientStop(Colors.Red, 0), new GradientStop(Colors.Yellow, 1d / 6),
+                new GradientStop(Colors.Lime, 2d / 6), new GradientStop(Colors.Cyan, .5),
+                new GradientStop(Colors.Blue, 4d / 6), new GradientStop(Colors.Magenta, 5d / 6),
+                new GradientStop(Colors.Red, 1) }, new Point(0, 0), new Point(1, 0));
+            brush.Freeze(); return brush;
+        }
+        protected override void OnRender(DrawingContext g)
+        {
+            double y = ActualHeight / 2;
+            g.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, ActualWidth, ActualHeight));
+            g.DrawRoundedRectangle(rainbow, null, new Rect(0, y - 7, ActualWidth, 14), 7, 7);
+            var point = new Point(8 + Value / 359.9 * Math.Max(1, ActualWidth - 16), y);
+            g.DrawEllipse(Theme.Brush(ColorField.Hsv(Value, 1, 1)), new Pen(Theme.Brush(Theme.Blend(Colors.Black, Colors.White, .2)), 3.5), point, 7.5, 7.5);
+            g.DrawEllipse(null, new Pen(Brushes.White, 1.8), point, 7.5, 7.5);
+        }
+    }
+
     sealed class ColorField : FrameworkElement
     {
+        DrawingGroup fieldArtwork;
+        double cachedHue, cachedWidth, cachedHeight;
         public double Hue, Saturation = 1, Value = 1;
         public Color Mixed => Hsv(Hue, Saturation, Value);
         public event Action<Color> Changed;
@@ -184,21 +242,31 @@ namespace SleepTimer
         protected override void OnRender(DrawingContext g)
         {
             var rect = new Rect(0, 0, ActualWidth, ActualHeight);
-            g.PushClip(new RectangleGeometry(rect, 8, 8));
-            g.DrawRectangle(new LinearGradientBrush(Colors.White, Hsv(Hue, 1, 1), new Point(0, 0), new Point(1, 0)), null, rect);
-            g.DrawRectangle(new LinearGradientBrush(Colors.Transparent, Colors.Black, new Point(0, 0), new Point(0, 1)), null, rect);
-            // The dotted curve marks 4.5:1 contrast for the current hue.
-            var path = new StreamGeometry();
-            using (var p = path.Open())
-                for (int x = 0; x <= ActualWidth; x += 3)
+            if (fieldArtwork == null || cachedHue != Hue || cachedWidth != ActualWidth || cachedHeight != ActualHeight)
+            {
+                cachedHue = Hue; cachedWidth = ActualWidth; cachedHeight = ActualHeight;
+                var artwork = new DrawingGroup();
+                using (var drawing = artwork.Open())
                 {
-                    double sat = x / ActualWidth, low = 0, high = 1;
-                    for (int i = 0; i < 16; i++) { double mid = (low + high) / 2; if (Theme.Contrast(Hsv(Hue, sat, mid), Theme.Bg) >= 4.5) high = mid; else low = mid; }
-                    var at = new Point(x, (1 - high) * ActualHeight);
-                    if (x == 0) p.BeginFigure(at, false, false); else p.LineTo(at, true, false);
+                    drawing.PushClip(new RectangleGeometry(rect, 8, 8));
+                    drawing.DrawRectangle(new LinearGradientBrush(Colors.White, Hsv(Hue, 1, 1), new Point(0, 0), new Point(1, 0)), null, rect);
+                    drawing.DrawRectangle(new LinearGradientBrush(Colors.Transparent, Colors.Black, new Point(0, 0), new Point(0, 1)), null, rect);
+                    // The dotted curve marks 4.5:1 contrast for the current hue.
+                    var path = new StreamGeometry();
+                    using (var p = path.Open())
+                        for (int x = 0; x <= ActualWidth; x += 3)
+                        {
+                            double sat = x / ActualWidth, low = 0, high = 1;
+                            for (int i = 0; i < 16; i++) { double mid = (low + high) / 2; if (Theme.Contrast(Hsv(Hue, sat, mid), Theme.Bg) >= 4.5) high = mid; else low = mid; }
+                            var at = new Point(x, (1 - high) * ActualHeight);
+                            if (x == 0) p.BeginFigure(at, false, false); else p.LineTo(at, true, false);
+                        }
+                    drawing.DrawGeometry(null, new Pen(Brushes.White, 1) { DashStyle = DashStyles.Dot }, path);
+                    drawing.Pop();
                 }
-            g.DrawGeometry(null, new Pen(Brushes.White, 1) { DashStyle = DashStyles.Dot }, path);
-            g.Pop();
+                artwork.Freeze(); fieldArtwork = artwork;
+            }
+            g.DrawDrawing(fieldArtwork);
             var marker = new Point(Saturation * ActualWidth, (1 - Value) * ActualHeight);
             g.DrawEllipse(null, new Pen(Brushes.Black, 3), marker, 6, 6);
             g.DrawEllipse(null, new Pen(Brushes.White, 2), marker, 6, 6);
