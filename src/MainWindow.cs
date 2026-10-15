@@ -44,7 +44,7 @@ namespace SleepTimer
         readonly TextBlock hourStopHelp = new TextBlock { FontSize = 12, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
         readonly TextBlock animationNote = new TextBlock { FontSize = 12, Foreground = Theme.Brush(Theme.Faint) };
         readonly TextBlock accentNote = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
-        readonly TextBox quickMinutes = new TextBox { MaxLength = 4, Width = 184, Tag = "Minutes", ToolTip = "Whole minutes from 1 to 1440" };
+        readonly TextBox quickMinutes = new TextBox { MaxLength = 32, Width = 184, Tag = "Minutes or hours", ToolTip = "60, 90m, 1h, 1.5h, 1,5h, 1h 30m or 1:30. Up to 24 hours." };
         readonly TextBlock quickNote = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
         readonly StackPanel customRows = new StackPanel();
         readonly ScrollViewer customScroll = new ThemedScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
@@ -136,7 +136,12 @@ namespace SleepTimer
                 Dispose();
                 if (!TestMode) Application.Current.Shutdown();
             };
-            PreviewKeyDown += (s, e) => { if (e.Key == Key.Escape && settingsOpen) { ToggleSettings(); e.Handled = true; } };
+            PreviewKeyDown += (s, e) =>
+            {
+                if (e.Key != Key.Escape) return;
+                if (colorPicker != null && colorPicker.IsVisible) { colorPicker.Close(); e.Handled = true; }
+                else if (settingsOpen) { ToggleSettings(); e.Handled = true; }
+            };
             PreviewMouseDown += (s, e) =>
             {
                 if (!(e.OriginalSource is TextBox) && Keyboard.FocusedElement is TextBox box
@@ -261,7 +266,9 @@ namespace SleepTimer
             }
             Place(appearance, Label("Custom", 12, true), 204, 70, 96, 16);
             Place(appearance, accentField, 204, 104, 96, 32);
-            accentField.PreviewMouseLeftButtonDown += (s, e) => OpenColorHelper();
+            // Let the TextBox receive its normal focus/caret click, then open after the release.
+            accentField.AddHandler(UIElement.MouseLeftButtonUpEvent, new MouseButtonEventHandler((s, e) =>
+                Dispatcher.BeginInvoke(DispatcherPriority.Input, (Action)OpenColorHelper)), true);
             accentField.Text = "#" + Theme.Accent.R.ToString("X2") + Theme.Accent.G.ToString("X2") + Theme.Accent.B.ToString("X2");
             accentField.TextChanged += (s, e) =>
             {
@@ -287,7 +294,7 @@ namespace SleepTimer
             Place(timerCard, add, 208, 104);
             add.Click += (s, e) => AddQuickTimer();
             quickMinutes.KeyDown += (s, e) => { if (e.Key == Key.Enter) { AddQuickTimer(); e.Handled = true; } };
-            quickNote.Text = "Enter 1–1440 minutes"; quickNote.SetResourceReference(TextBlock.ForegroundProperty, "FaintBrush");
+            quickNote.Text = "1–1440 min · 90, 1h, 1.5h or 1h 30m"; quickNote.SetResourceReference(TextBlock.ForegroundProperty, "FaintBrush");
             Place(timerCard, quickNote, 16, 144, 288, 20);
             customScroll.Content = customRows;
             Place(timerCard, customScroll, 16, 176, 288, 32);
@@ -488,7 +495,7 @@ namespace SleepTimer
         void AddQuickTimer()
         {
             if (!QuickTimers.TryMinutes(quickMinutes.Text.Trim(), out int minutes))
-            { quickNote.Text = "Use a whole number from 1 to 1440 minutes."; quickNote.SetResourceReference(TextBlock.ForegroundProperty, "DangerBrush"); }
+            { quickNote.Text = "Use minutes or hours, up to 24 h."; quickNote.SetResourceReference(TextBlock.ForegroundProperty, "DangerBrush"); }
             else if (!quickTimers.Add(minutes))
             { quickNote.Text = "That timer is already in the quick menu."; quickNote.SetResourceReference(TextBlock.ForegroundProperty, "SecondBrush"); }
             else
@@ -513,8 +520,15 @@ namespace SleepTimer
                 row.ColumnDefinitions.Add(new ColumnDefinition());
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 row.Children.Add(Label(QuickTimers.Label(minutes)));
-                var remove = new Button { Content = "×", FontSize = 20, Width = 28, Height = 28, Padding = new Thickness(0), VerticalAlignment = VerticalAlignment.Center,
-                    Foreground = Theme.Brush(Theme.Danger), Style = (Style)FindResource("RemoveButton"),
+                var trash = new System.Windows.Shapes.Path
+                {
+                    Data = Geometry.Parse("M3,6 H21 M9,6 V4 Q9,3 10,3 H14 Q15,3 15,4 V6 M5,6 L6,20 Q6,21 7,21 H17 Q18,21 18,20 L19,6 M10,10 V17 M14,10 V17"),
+                    Width = 14, Height = 14, Stretch = Stretch.Uniform, StrokeThickness = 1.5,
+                    StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round
+                };
+                trash.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "DangerBrush");
+                var remove = new Button { Content = trash, Width = 28, Height = 28, Padding = new Thickness(0), VerticalAlignment = VerticalAlignment.Center,
+                    Style = (Style)FindResource("RemoveButton"),
                     ToolTip = "Remove " + QuickTimers.Label(minutes) };
                 remove.Click += (s, e) =>
                 {
@@ -600,7 +614,7 @@ namespace SleepTimer
             bool idle = countdown.State == TimerState.Idle;
             var menu = new List<MenuRow>
             {
-                new MenuRow { Text = "Keep awake", Right = (awakeMinutes == 0 ? "Off" : awakeMinutes < 0 ? "On" : TimeText.Clock(awakeEnd - clock.Elapsed.TotalSeconds)) + " ›", KeepOpen = true, Click = () => SetTrayPage(1) },
+                new MenuRow { Text = "Keep awake", Selected = awakeMinutes != 0, Right = (awakeMinutes == 0 ? "Off" : awakeMinutes < 0 ? "On" : TimeText.Clock(awakeEnd - clock.Elapsed.TotalSeconds)) + " ›", KeepOpen = true, Click = () => SetTrayPage(1) },
                 new MenuRow { Text = "Quick timers", Right = quickAction.Label + " ›", KeepOpen = true, Enabled = !executing, Click = () => SetTrayPage(2) },
                 new MenuRow { Separator = true },
                 new MenuRow { Text = idle ? "Start timer" : "Cancel timer",

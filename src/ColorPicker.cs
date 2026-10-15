@@ -126,7 +126,7 @@ namespace SleepTimer
             border.SetValue(TextElement.FontFamilyProperty, new FontFamily("Segoe UI"));
             border.PreviewKeyDown += (s, e) => { if (e.Key == Key.Escape) { Close(); e.Handled = true; } };
             popup.Child = border;
-            popup.Opened += (s, e) => border.Focus();
+            // Keep keyboard focus and the caret in the anchor field until a popup control is clicked.
             var drawingColor = System.Drawing.Color.FromArgb(current.R, current.G, current.B);
             field.Hue = drawingColor.GetHue();
             double max = Math.Max(current.R, Math.Max(current.G, current.B)) / 255d;

@@ -11,7 +11,7 @@ namespace SleepTimer
 {
     static class VisualText
     {
-        public static FontFamily Mono => new FontFamily(Fonts.SystemFontFamilies.Any(f => f.Source == "Cascadia Code") ? "Cascadia Code"
+        public static FontFamily Mono { get; } = new FontFamily(Fonts.SystemFontFamilies.Any(f => f.Source == "Cascadia Code") ? "Cascadia Code"
             : Fonts.SystemFontFamilies.Any(f => f.Source == "Cascadia Mono") ? "Cascadia Mono" : "Consolas");
         public static FormattedText Make(Visual owner, string text, double size, Color color, bool bold = false, bool mono = false) =>
             new FormattedText(text ?? "", CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,

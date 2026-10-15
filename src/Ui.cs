@@ -58,6 +58,7 @@ namespace SleepTimer
             r["FaintBrush"] = Brush(Faint);
             r["DangerBrush"] = Brush(Danger);
             r["DangerSoftBrush"] = Brush(Blend(Bg, Danger, .14));
+            r["DangerHoverBrush"] = Brush(Blend(Bg, Danger, .25));
             r["MenuEdgeBrush"] = Brush(Blend(Border, Blend(Bg, Text, .24), .8));
             r["SoftBrush"] = Brush(Blend(Surface, Accent, .18));
             r["OnAccentBrush"] = Brush(Contrast(Accent, Bg) >= Contrast(Accent, Colors.White) ? Bg : Colors.White);
@@ -215,14 +216,14 @@ namespace SleepTimer
 
  <Style x:Key='RemoveButton' TargetType='Button' BasedOn='{StaticResource {x:Type Button}}'>
   <Setter Property='Foreground' Value='{DynamicResource DangerBrush}'/>
-  <Setter Property='Background' Value='Transparent'/><Setter Property='BorderThickness' Value='0'/>
+  <Setter Property='Background' Value='{DynamicResource DangerSoftBrush}'/><Setter Property='BorderThickness' Value='0'/>
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Button'>
    <Border x:Name='box' CornerRadius='4' Background='{TemplateBinding Background}'>
     <ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/>
    </Border>
    <ControlTemplate.Triggers>
-    <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='box' Property='Background' Value='{DynamicResource DangerSoftBrush}'/></Trigger>
-    <Trigger Property='IsKeyboardFocused' Value='True'><Setter TargetName='box' Property='Background' Value='{DynamicResource DangerSoftBrush}'/></Trigger>
+    <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='box' Property='Background' Value='{DynamicResource DangerHoverBrush}'/></Trigger>
+    <Trigger Property='IsKeyboardFocused' Value='True'><Setter TargetName='box' Property='Background' Value='{DynamicResource DangerHoverBrush}'/></Trigger>
    </ControlTemplate.Triggers>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
@@ -277,6 +278,23 @@ namespace SleepTimer
         readonly Stopwatch edit = new Stopwatch();
         double target = 1800;
         bool hot;
+        DrawingGroup dialArtwork;
+        Point artworkCenter;
+        Color artworkColor;
+        bool artworkHot;
+        readonly Geometry[] hourSectors = new Geometry[24];
+        readonly Drawing[] hourArtwork = new Drawing[24];
+        readonly Dictionary<double, TextArtwork> textArtwork = new Dictionary<double, TextArtwork>();
+        static readonly Typeface normalFace = new Typeface("Segoe UI");
+        static readonly Typeface boldFace = new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+        sealed class TextArtwork
+        {
+            public string Text;
+            public Color Color;
+            public double Dpi, Width;
+            public bool Bold;
+            public FormattedText Drawing;
+        }
 
         public TimerFace()
         {
@@ -390,36 +408,64 @@ namespace SleepTimer
             g.DrawEllipse(Brushes.Transparent, null, center, 158, 158);
             const double radius = 140, stroke = 16;
             Color color = Theme.TimerColor(Tone);
-            g.DrawEllipse(null, new Pen(Theme.Brush(hot ? Theme.Border : Theme.Blend(Theme.Bg, Theme.Text, .09)), stroke), center, radius, radius);
-            g.DrawEllipse(null, new Pen(Theme.Brush(Theme.Border), 1), center, radius + 10, radius + 10);
+            if (dialArtwork == null || artworkCenter != center || artworkColor != color || artworkHot != hot)
+                CacheDial(center, color);
+            g.DrawDrawing(dialArtwork);
             double shown = TimerDial.ArcFraction(Position);
             if (shown > .000001) DrawArc(g, center, radius, -90, shown * 360, stroke, color);
-            for (int i = 0; i < 60; i++)
-            {
-                double angle = (i * 6 - 90) * Math.PI / 180;
-                bool major = i % 5 == 0;
-                var pen = new Pen(Theme.Brush(Theme.Blend(Theme.Bg, color, major ? .65 : .28)), major ? 1.7 : 1) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
-                g.DrawLine(pen, Polar(center, radius + 12, angle), Polar(center, radius + 12 + (major ? 6 : 3), angle));
-            }
             double hours = Math.Max(0, Position / 3600);
             for (int i = 0; i < (int)Math.Ceiling(hours); i++)
             {
                 double opacity = Math.Min(1, hours - i);
-                var path = Sector(center, 129, 119, -90 + i * 15, 15);
-                g.DrawGeometry(Theme.Brush(Theme.Blend(Theme.Bg, color, opacity)),
-                    new Pen(Theme.Brush(Theme.Blend(Theme.Bg, Theme.Blend(Theme.Border, color, .3), opacity)), 1), path);
+                if (opacity >= 1) g.DrawDrawing(hourArtwork[i]);
+                else g.DrawGeometry(Theme.Brush(Theme.Blend(Theme.Bg, color, opacity)),
+                    new Pen(Theme.Brush(Theme.Blend(Theme.Bg, Theme.Blend(Theme.Border, color, .3), opacity)), 1), hourSectors[i]);
             }
             DrawText(g, Title, center.Y - 96, 12, Theme.Second, true);
             DrawText(g, DisplayTime, center.Y - 66, 45.3, Theme.Text);
             DrawText(g, Sub, center.Y + 51, 14, Theme.Second);
         }
+        void CacheDial(Point center, Color color)
+        {
+            artworkCenter = center; artworkColor = color; artworkHot = hot;
+            var drawing = new DrawingGroup();
+            using (var g = drawing.Open())
+            {
+                g.DrawEllipse(null, new Pen(Theme.Brush(hot ? Theme.Border : Theme.Blend(Theme.Bg, Theme.Text, .09)), 16), center, 140, 140);
+                g.DrawEllipse(null, new Pen(Theme.Brush(Theme.Border), 1), center, 150, 150);
+                var major = new Pen(Theme.Brush(Theme.Blend(Theme.Bg, color, .65)), 1.7) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+                var minor = new Pen(Theme.Brush(Theme.Blend(Theme.Bg, color, .28)), 1) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+                for (int i = 0; i < 60; i++)
+                {
+                    double angle = (i * 6 - 90) * Math.PI / 180;
+                    bool tick = i % 5 == 0;
+                    g.DrawLine(tick ? major : minor, Polar(center, 152, angle), Polar(center, tick ? 158 : 155, angle));
+                }
+            }
+            drawing.Freeze(); dialArtwork = drawing;
+            var fill = Theme.Brush(color);
+            var edge = new Pen(Theme.Brush(Theme.Blend(Theme.Border, color, .3)), 1); edge.Freeze();
+            for (int i = 0; i < hourSectors.Length; i++)
+            {
+                hourSectors[i] = Sector(center, 129, 119, -90 + i * 15, 15);
+                var block = new GeometryDrawing(fill, edge, hourSectors[i]); block.Freeze();
+                hourArtwork[i] = block;
+            }
+        }
         void DrawText(DrawingContext g, string text, double y, double size, Color color, bool bold = false)
         {
-            var ft = new FormattedText(text ?? "", CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-                new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, bold ? FontWeights.SemiBold : FontWeights.Normal, FontStretches.Normal),
-                size, Theme.Brush(color), VisualTreeHelper.GetDpi(this).PixelsPerDip);
-            ft.MaxTextWidth = ActualWidth; ft.TextAlignment = TextAlignment.Center;
-            g.DrawText(ft, new Point(0, y));
+            text = text ?? "";
+            double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            if (!textArtwork.TryGetValue(size, out TextArtwork cached) || cached.Text != text || cached.Color != color
+                || cached.Dpi != dpi || cached.Width != ActualWidth || cached.Bold != bold)
+            {
+                var drawing = new FormattedText(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+                    bold ? boldFace : normalFace, size, Theme.Brush(color), dpi)
+                { MaxTextWidth = ActualWidth, TextAlignment = TextAlignment.Center };
+                cached = new TextArtwork { Text = text, Color = color, Dpi = dpi, Width = ActualWidth, Bold = bold, Drawing = drawing };
+                textArtwork[size] = cached;
+            }
+            g.DrawText(cached.Drawing, new Point(0, y));
         }
         static Point Polar(Point c, double r, double a) => new Point(c.X + r * Math.Cos(a), c.Y + r * Math.Sin(a));
         public static void DrawArc(DrawingContext g, Point c, double r, double start, double sweep, double width, Color color)
@@ -547,7 +593,7 @@ namespace SleepTimer
                     items.Children.Add(header); continue;
                 }
                 var button = new Button { Content = grid, IsEnabled = row.Enabled, Tag = row.Danger ? "danger" : null, Style = (Style)Application.Current.FindResource("MenuButton"),
-                    Background = row.Selected ? Theme.Brush(Theme.Blend(Theme.Surface, Theme.Accent, .06)) : Brushes.Transparent };
+                    Background = row.Selected ? Theme.Brush(Theme.Blend(Theme.Surface, Theme.Accent, .18)) : Brushes.Transparent };
                 button.MouseEnter += (s, e) => label.Foreground = Theme.Brush(row.Danger ? Theme.Blend(Theme.Danger, Colors.White, .3) : Theme.Blend(Theme.Accent, Colors.White, .22));
                 button.MouseLeave += (s, e) => label.Foreground = Theme.Brush(row.Danger ? Theme.Blend(Theme.Danger, Colors.White, .3) : row.Selected ? Theme.Accent : Theme.Text);
                 button.Click += (s, e) => { if (!row.KeepOpen) Close(); row.Click?.Invoke(); };

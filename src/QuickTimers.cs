@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace SleepTimer
 {
@@ -18,8 +19,33 @@ namespace SleepTimer
                 if (TryMinutes(value, out int minutes)) Add(minutes);
         }
 
-        public static bool TryMinutes(string text, out int minutes) =>
-            int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out minutes) && minutes >= 1 && minutes <= 1440;
+        public static bool TryMinutes(string text, out int minutes)
+        {
+            minutes = 0;
+            string value = (text ?? "").Trim().ToLowerInvariant();
+            decimal total;
+            var clock = Regex.Match(value, @"^(\d+)\s*:\s*(\d{1,2})$");
+            if (clock.Success)
+            {
+                if (!decimal.TryParse(clock.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out decimal hours)
+                    || hours > 24 || !int.TryParse(clock.Groups[2].Value, out int part) || part >= 60) return false;
+                total = hours * 60 + part;
+            }
+            else
+            {
+                var match = Regex.Match(value, @"^(?:(?<h>\d+(?:[.,]\d+)?)\s*(?:hours?|hrs?|h)\s*)?(?:(?<m>\d+(?:[.,]\d+)?)\s*(?:minutes?|mins?|m)?)?$");
+                if (!match.Success || (!match.Groups["h"].Success && !match.Groups["m"].Success)) return false;
+                decimal hours = 0, remainder = 0;
+                if (match.Groups["h"].Success
+                    && (!decimal.TryParse(match.Groups["h"].Value.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out hours) || hours > 24)) return false;
+                if (match.Groups["m"].Success
+                    && (!decimal.TryParse(match.Groups["m"].Value.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out remainder) || remainder > 1440)) return false;
+                total = hours * 60 + remainder;
+            }
+            if (total < 1 || total > 1440) return false;
+            minutes = (int)Math.Round(total, 0, MidpointRounding.AwayFromZero);
+            return true;
+        }
 
         public bool Add(int minutes) => minutes >= 1 && minutes <= 1440 && !Defaults.Contains(minutes) && custom.Add(minutes);
         public bool Remove(int minutes) => custom.Remove(minutes);
