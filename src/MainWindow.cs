@@ -837,7 +837,9 @@ namespace SleepTimer
         void SetTrayPage(int page) { trayPage = page; trayMenu.SetRows(TrayRows()); }
         void ShowTrayMenu()
         {
-            if (trayMenu.Visible || trayMenu.JustClosed || disposed) return;
+            // Native tray clicks do not bubble through a WPF anchor button.
+            // Honor a fresh request even if an earlier popup just lost capture.
+            if (trayMenu.Visible || disposed) return;
             Native.SetForegroundWindow(new WindowInteropHelper(this).Handle);
             trayPage = 0; trayMenu.Show(TrayRows(), this, screenPosition: trayClick);
         }

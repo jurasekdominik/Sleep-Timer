@@ -36,6 +36,12 @@ Reviewed using the Ponytail audit, WPF and .NET guidance. Findings below were fi
    - **Fix:** Move the gallery into a dedicated window with Timer/UI tabs and apply-and-close on double-click. Keep callbacks for applying preferences in MainWindow.
    - **If we skip it:** The requested selection flow remains incomplete and font-window changes keep expanding the main coordinator.
 
+6. **A fresh tray click could be discarded after closing a popup** (`src/MainWindow.cs`, `ShowTrayMenu`)
+   - **What this is:** Native tray clicks open the context menu.
+   - **Problem:** The WPF button debounce also blocked native tray requests for 180 ms after a popup closed. Windows validation hit this while restoring the main window.
+   - **Fix:** Keep debounce for WPF anchor buttons, but honor fresh native tray requests. The existing reopen and monitor-placement checks exercise this path.
+   - **If we skip it:** The tray can ignore a click immediately after closing or restoring a window.
+
 ## Validation and scope
 
 Reviewed timer input and expiry, scheduling and daylight-saving handling, power-action dispatch and error recovery, registry persistence, global shortcut lifetime, tray placement, icon ownership, WPF drawing caches, font availability and weights, shutdown cleanup, entry points, project configuration and release automation. No new packages were introduced.

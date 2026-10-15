@@ -457,6 +457,7 @@ namespace SleepTimer
                             var area = monitor.WorkingArea;
                             int px = area.Left + area.Width * 3 / 4, py = area.Top + area.Height * 3 / 4;
                             Set(visual, "trayClick", new System.Windows.Point(px, py)); Call(visual, "ShowTrayMenu"); Pump(150);
+                            Check(trayPopup.Visible, "Fresh native tray request was discarded after restoring the window");
                             var bounds = PopupBounds(trayPopup);
                             var expected = ScreenPlacement.Above(px, py, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top,
                                 area.Left, area.Top, area.Right, area.Bottom);
