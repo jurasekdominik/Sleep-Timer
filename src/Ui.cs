@@ -660,7 +660,7 @@ namespace SleepTimer
             }
             scroll.ScrollToVerticalOffset(scrollOffset);
         }
-        public void Show(IEnumerable<MenuRow> rows, UIElement anchor = null, bool above = false, Point? screenPosition = null)
+        public void Show(IEnumerable<MenuRow> rows, UIElement anchor = null, bool above = false, Point? screenPosition = null, bool alignRight = false)
         {
             var entries = rows.ToArray();
             bool overlay = anchor != null && entries.Length > 0 && entries[0].Header;
@@ -668,7 +668,8 @@ namespace SleepTimer
             popup.CustomPopupPlacementCallback = null;
             popup.PlacementTarget = anchor;
             popup.Placement = anchor == null ? PlacementMode.MousePoint : overlay ? PlacementMode.Relative : above ? PlacementMode.Top : PlacementMode.Bottom;
-            popup.HorizontalOffset = anchor == null ? -border.Width : overlay ? -1 : 0;
+            popup.HorizontalOffset = anchor == null ? -border.Width : overlay ? -1
+                : alignRight ? anchor.RenderSize.Width - border.Width : 0;
             // Cancel the border and top padding so the header stays on the closed field baseline.
             popup.VerticalOffset = anchor == null ? -border.DesiredSize.Height : overlay ? -5 : 4;
             // Measure before opening so the tray popup has a real size on the first show.

@@ -21,7 +21,7 @@ namespace SleepTimer
         readonly Button uiTab = new Button { Content = "UI" };
         readonly Border tabUnderline = new Border { Height = 2.5 };
         readonly TranslateTransform tabSlide = new TranslateTransform();
-        readonly Button weightButton = new Button { FontSize = 12, Height = 22, HorizontalAlignment = HorizontalAlignment.Right,
+        readonly Button weightButton = new Button { Content = "Font Weight ▾", FontSize = 12, Height = 26, Padding = new Thickness(8, 0, 8, 0), HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top, ToolTip = "Font weight" };
         readonly TextBlock note = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 0) };
         public bool IsUi { get; private set; }
@@ -47,8 +47,7 @@ namespace SleepTimer
             tabUnderline.RenderTransform = tabSlide;
             tabUnderline.SetResourceReference(Border.BackgroundProperty, "AccentBrush");
             Canvas.SetTop(tabUnderline, 18); tabs.Children.Add(tabUnderline); header.Children.Add(tabs);
-            weightButton.Style = (Style)FindResource("TextButton");
-            weightButton.SetResourceReference(Control.ForegroundProperty, "FaintBrush");
+            weightButton.SetResourceReference(Control.ForegroundProperty, "TextBrush");
             Grid.SetColumn(weightButton, 1); header.Children.Add(weightButton); panel.Children.Add(header);
             timerTab.Click += (s, e) => SelectScope(false); uiTab.Click += (s, e) => SelectScope(true);
             var available = new TextBlock { Text = "Installed fonts only · no downloads", FontSize = 11, Margin = new Thickness(0, 4, 0, 0) };
@@ -61,7 +60,7 @@ namespace SleepTimer
                 weights.Show(current.Weights.Select(weight => new MenuRow {
                     Text = AppFont.WeightName(weight), Selected = weight == current.Typeface.Weight,
                     Click = () => { chooseWeight(weight.ToOpenTypeWeight(), IsUi); RefreshChoices(); }
-                }), weightButton);
+                }), weightButton, alignRight: true);
             };
             note.SetResourceReference(TextBlock.ForegroundProperty, "FaintBrush"); panel.Children.Add(note);
             var done = new Button { Content = "Done", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
@@ -108,7 +107,6 @@ namespace SleepTimer
             tabUnderline.BeginAnimation(WidthProperty, new DoubleAnimation(double.IsNaN(tabUnderline.Width) ? timerWidth : tabUnderline.Width,
                 IsUi ? uiWidth : timerWidth, TimeSpan.FromMilliseconds(220)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
             var current = IsUi ? AppFonts.Ui : AppFonts.Timer;
-            weightButton.Content = AppFont.WeightName(current.Typeface.Weight) + " ▾";
             foreach (var button in choices)
             {
                 var family = (AppFont)button.Tag;
