@@ -82,7 +82,13 @@ namespace SleepTimer
                     {
                         var countdown = Field<Countdown>(window, "countdown");
                         var face = Field<TimerFace>(window, "face");
+                        Call(window, "SetAction", "sleep");
+                        var force = Field<ToggleButton>(window, "forceSwitch");
+                        Check(force.IsEnabled, "Force-close setting cannot be switched off while Sleep is selected");
+                        force.IsChecked = false; force.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                        Check(!Settings.Get("force", true), "Force-close setting did not save Off");
                         Call(window, "SetAction", "shutdown");
+                        Check(window.Title == "30:00 · Ready", "Window title is missing current timer/status");
                         Call(window, "AddTime", 1800);
                         Check(countdown.Duration == 3600, "Wheel did not stop at hour");
                         Call(window, "AddTime", 300); Check(countdown.Duration == 3600, "400 ms hold ignored");
